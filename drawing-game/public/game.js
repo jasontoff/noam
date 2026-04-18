@@ -1,5 +1,9 @@
 // Doodle Duel — client
-const socket = io();
+// Connect to Cloud Run backend when hosted on noam.bot, same-host for local dev.
+const BACKEND_URL = window.location.hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)
+  ? undefined
+  : 'https://drawing-game-server-2d6x6hh7aq-uc.a.run.app';
+const socket = BACKEND_URL ? io(BACKEND_URL) : io();
 
 let me = { id: null, name: null };
 let gameState = 'waiting';

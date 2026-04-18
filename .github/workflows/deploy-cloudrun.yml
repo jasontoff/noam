@@ -9,11 +9,16 @@ on:
       - 'fps-game/package-lock.json'
       - 'fps-game/Dockerfile'
       - 'fps-game/public/**'
+      - 'drawing-game/server.js'
+      - 'drawing-game/package.json'
+      - 'drawing-game/package-lock.json'
+      - 'drawing-game/Dockerfile'
+      - 'drawing-game/public/**'
       - '.github/workflows/deploy-cloudrun.yml'
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-fps:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +30,34 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy to Cloud Run
+      - name: Deploy fps-game-server to Cloud Run
         run: |
           gcloud run deploy fps-game-server \
             --source fps-game \
+            --region us-central1 \
+            --project gen-lang-client-0448267425 \
+            --allow-unauthenticated \
+            --session-affinity \
+            --max-instances=20 \
+            --timeout=3600 \
+            --quiet
+
+  deploy-drawing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy drawing-game-server to Cloud Run
+        run: |
+          gcloud run deploy drawing-game-server \
+            --source drawing-game \
             --region us-central1 \
             --project gen-lang-client-0448267425 \
             --allow-unauthenticated \
