@@ -16,3 +16,20 @@ npm start
 ```
 
 Then open http://localhost:3000
+
+## racing-game
+
+Arcade racer with single-player and multiplayer (vs NPCs) modes.
+Built with Three.js.
+
+### Run locally
+
+```
+cd racing-game
+npm install
+npm start
+```
+
+Then open http://localhost:3001
+
+Controls: WASD or arrow keys to drive, SPACE for handbrake.
