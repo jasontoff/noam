@@ -9,6 +9,7 @@ on:
       - 'fps-game/.firebaserc'
       - 'racing-game/public/**'
       - 'drawing-game/public/**'
+      - 'tower-defense-game/public/**'
       - '.github/workflows/deploy-hosting.yml'
   workflow_dispatch:
 
@@ -36,6 +37,10 @@ jobs:
           cp ../drawing-game/public/index.html hosting-public/drawing-game/
           cp ../drawing-game/public/game.js hosting-public/drawing-game/
 
+          mkdir -p hosting-public/tower-defense-game
+          cp ../tower-defense-game/public/index.html hosting-public/tower-defense-game/
+          cp ../tower-defense-game/public/game.js hosting-public/tower-defense-game/
+
           cat > hosting-public/index.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en"><head><meta charset="UTF-8"><title>noam.bot</title>
@@ -50,6 +55,7 @@ jobs:
             <a href="/fps-game/">Play FPS Arena</a>
             <a href="/racing-game/">Play Racing</a>
             <a href="/drawing-game/">Play Doodle Duel</a>
+            <a href="/tower-defense-game/">Play Tower Defense</a>
           </div></body></html>
           EOF
 
