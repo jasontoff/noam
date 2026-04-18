@@ -72,13 +72,45 @@ Open http://localhost:3001. Controls: WASD or arrow keys to drive, SPACE for han
 
 ---
 
+## drawing-game
+
+Multiplayer draw-and-guess ("Doodle Duel"). Built with Express + Socket.IO on the server, HTML5 Canvas + vanilla JS on the client. Skribbl.io-style turn-based rounds with a silly, school-safe word list.
+
+**Live at:** [noam.bot/drawing-game](https://noam.bot/drawing-game/)
+
+### Architecture
+
+Same shape as fps-game: static files on Firebase Hosting, authoritative Socket.IO server on Cloud Run.
+
+- **Frontend** in `drawing-game/public/` — single canvas, color/size toolbar, live scoreboard, chat panel.
+- **Backend** is `drawing-game/server.js` — owns the round timer, word choice, drawer rotation, stroke broadcast, and scoring. Clients send normalized stroke coords (0..1) so every resolution renders consistently.
+- Cloud Run service: `drawing-game-server` in `us-central1`.
+
+### Run locally
+
+```bash
+cd drawing-game
+npm install
+npm start
+```
+
+Open http://localhost:3002 in two tabs (or on two devices on the same LAN). Needs at least 2 players to start a round.
+
+### Scoring
+
+- Guesser: +60 to +150 based on how fast they guessed.
+- Drawer: +50 per correct guesser.
+- Round ends when time runs out OR everyone has guessed.
+
+---
+
 ## Repo layout
 
 ```
 noam/
 ├── .github/workflows/       # CI/CD — auto-deploys on push to main
-│   ├── deploy-hosting.yml   #   → Firebase Hosting (fps-game + racing-game)
-│   └── deploy-cloudrun.yml  #   → Cloud Run (fps-game server)
+│   ├── deploy-hosting.yml   #   → Firebase Hosting (fps-game + racing-game + drawing-game)
+│   └── deploy-cloudrun.yml  #   → Cloud Run (fps-game-server + drawing-game-server)
 ├── fps-game/
 │   ├── public/              # Client code served to browsers
 │   │   ├── index.html       #   UI shell, menus, HUD
@@ -93,6 +125,13 @@ noam/
 │   ├── public/              # Client code (index.html + game.js)
 │   ├── server.js            # Local dev server only (static files)
 │   └── package.json
+├── drawing-game/
+│   ├── public/              # Canvas UI + client networking
+│   │   ├── index.html
+│   │   └── game.js
+│   ├── server.js            # Authoritative round/scoring/stroke broadcast
+│   ├── Dockerfile           # Cloud Run build
+│   └── package.json
 └── README.md
 ```
 
@@ -102,22 +141,33 @@ noam/
 
 **You don't have to do anything manually.** Pushing to `main` triggers GitHub Actions:
 
-- Changes under `fps-game/public/**` or `racing-game/public/**` → Firebase Hosting redeploys (~35s)
-- Changes to `fps-game/server.js`, `Dockerfile`, or `package*.json` → Cloud Run redeploys (~1m)
+- Changes under `fps-game/public/**`, `racing-game/public/**`, or `drawing-game/public/**` → Firebase Hosting redeploys (~35s)
+- Changes to `fps-game/server.js`, `fps-game/Dockerfile`, or `fps-game/package*.json` → `fps-game-server` Cloud Run redeploys (~1m)
+- Changes to `drawing-game/server.js`, `drawing-game/Dockerfile`, or `drawing-game/package*.json` → `drawing-game-server` Cloud Run redeploys (~1m)
 
 Watch runs with `gh run list` or at https://github.com/jasontoff/noam/actions.
 
 ### Manual deploy (fallback)
 
 ```bash
-# Firebase Hosting (static files for both games)
+# Firebase Hosting (static files for all games)
 cd fps-game
 # regenerate hosting-public/ first — see .github/workflows/deploy-hosting.yml
 firebase deploy --only hosting:noam
 
-# Cloud Run (fps-game server)
+# Cloud Run — fps-game server
 gcloud run deploy fps-game-server \
-  --source . \
+  --source fps-game \
+  --region us-central1 \
+  --project gen-lang-client-0448267425 \
+  --allow-unauthenticated \
+  --session-affinity \
+  --max-instances=20 \
+  --timeout=3600
+
+# Cloud Run — drawing-game server
+gcloud run deploy drawing-game-server \
+  --source drawing-game \
   --region us-central1 \
   --project gen-lang-client-0448267425 \
   --allow-unauthenticated \
@@ -132,7 +182,7 @@ Session affinity matters — Socket.IO needs a sticky connection to one Cloud Ru
 
 - **Firebase project:** `gen-lang-client-0448267425`
 - **Firebase Hosting site:** `noam-bot` (target alias: `noam`), connected to the custom domain `noam.bot`
-- **Cloud Run service:** `fps-game-server` in `us-central1`
+- **Cloud Run services:** `fps-game-server` and `drawing-game-server`, both in `us-central1`
 - **GitHub Actions service account:** `github-deployer@gen-lang-client-0448267425.iam.gserviceaccount.com` (key stored as repo secrets `FIREBASE_SERVICE_ACCOUNT` and `GCP_SERVICE_ACCOUNT`)
 
 ---
@@ -144,9 +194,10 @@ Session affinity matters — Socket.IO needs a sticky connection to one Cloud Ru
 - Adding a new weapon: edit `WEAPONS` in `fps-game/server.js` AND add a button in the weapon-select UI in `fps-game/public/index.html`.
 - Character and weapon models are in `fps-game/public/models/`. They're GLB format loaded via Three.js GLTFLoader.
 - The racing-game has no backend — NPC AI runs entirely client-side. Tune difficulty via the `skill` band in `racing-game/public/game.js` (`spawnCars`).
+- The drawing-game server is authoritative over rounds/scoring/drawer selection. Word list lives at the top of `drawing-game/server.js` — add/remove freely. Canvas coords are normalized 0..1 so resolution doesn't matter.
 
 ## Troubleshooting
 
-- **Game loads but can't connect:** (fps-game only) check Cloud Run service is up (`gcloud run services describe fps-game-server --region us-central1`). The hardcoded URL in `fps-game/public/game.js` must match the Cloud Run URL.
+- **Game loads but can't connect:** check the relevant Cloud Run service is up (`gcloud run services describe fps-game-server --region us-central1`, or `drawing-game-server`). The hardcoded URL in the client's `game.js` must match the Cloud Run URL.
 - **Changes don't appear after push:** check GitHub Actions ran (`gh run list`). Hosting is cached with `Cache-Control: no-cache` so hard-refresh usually works.
 - **WebSocket disconnects randomly:** Cloud Run has a max request timeout of 60min (set via `--timeout=3600`). Idle instances also spin down; the first connection after a cold start may take a few seconds.
