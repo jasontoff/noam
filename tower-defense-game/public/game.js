@@ -123,15 +123,96 @@
       desc: 'Huge range, high damage',
       aoe: 0,
     },
+    poison: {
+      name: 'Poison Tower',
+      cost: 110,
+      range: 130,
+      damage: 5,
+      fireRate: 0.7,
+      color: '#66bb6a',
+      outline: '#1b5e20',
+      bulletColor: '#ccff90',
+      bulletSpeed: 440,
+      desc: 'Damage over time',
+      aoe: 0,
+      poison: 14,        // dot damage per second
+      poisonDuration: 3.5,
+    },
+    tesla: {
+      name: 'Tesla',
+      cost: 240,
+      range: 150,
+      damage: 28,
+      fireRate: 1.0,
+      color: '#00e5ff',
+      outline: '#006064',
+      bulletColor: '#b2ebf2',
+      bulletSpeed: 0,
+      desc: 'Chain lightning',
+      aoe: 0,
+      chain: 3,           // number of targets
+      chainRange: 110,    // jump distance between targets
+      chainFalloff: 0.7,  // each jump does 70% of the last
+    },
+    mortar: {
+      name: 'Mortar',
+      cost: 260,
+      range: 300,
+      damage: 70,
+      fireRate: 2.8,
+      color: '#6d4c41',
+      outline: '#3e2723',
+      bulletColor: '#d7ccc8',
+      bulletSpeed: 260,
+      desc: 'Long range, huge splash',
+      aoe: 75,
+      lobbed: true,       // shell arcs to a target point (no homing)
+    },
+    flame: {
+      name: 'Flame Tower',
+      cost: 170,
+      range: 95,
+      damage: 30,         // damage/sec to every enemy in range
+      fireRate: 0,
+      color: '#ff5722',
+      outline: '#b71c1c',
+      bulletColor: '#ffab91',
+      bulletSpeed: 0,
+      desc: 'AoE continuous burn',
+      aoe: 0,
+      continuous: true,
+      cone: true,         // hits all enemies in range
+    },
+    support: {
+      name: 'Support Tower',
+      cost: 180,
+      range: 110,
+      damage: 0,
+      fireRate: 0,
+      color: '#ffc107',
+      outline: '#bf6f00',
+      bulletColor: '#ffecb3',
+      bulletSpeed: 0,
+      desc: 'Boosts nearby towers',
+      aoe: 0,
+      aura: true,
+      auraDamage: 0.25,   // +25% damage
+      auraRange: 0.15,    // +15% range
+    },
   };
 
   // ---------- Enemy Types ----------
   const ENEMY_TYPES = {
-    grunt: { hp: 40, speed: 60, reward: 8, damage: 1, color: '#c0392b', radius: 11, name: 'Grunt' },
-    fast:  { hp: 22, speed: 120, reward: 10, damage: 1, color: '#f1c40f', radius: 9, name: 'Fast' },
-    tank:  { hp: 180, speed: 35, reward: 22, damage: 3, color: '#34495e', radius: 15, name: 'Tank' },
-    swarm: { hp: 15, speed: 90, reward: 4, damage: 1, color: '#9b59b6', radius: 7, name: 'Swarm' },
-    boss:  { hp: 900, speed: 28, reward: 120, damage: 10, color: '#111', radius: 20, name: 'Boss' },
+    grunt:    { hp: 40,  speed: 60,  reward: 8,   damage: 1,  color: '#c0392b', radius: 11, name: 'Grunt' },
+    fast:     { hp: 22,  speed: 120, reward: 10,  damage: 1,  color: '#f1c40f', radius: 9,  name: 'Fast' },
+    tank:     { hp: 180, speed: 35,  reward: 22,  damage: 3,  color: '#34495e', radius: 15, name: 'Tank' },
+    swarm:    { hp: 15,  speed: 90,  reward: 4,   damage: 1,  color: '#9b59b6', radius: 7,  name: 'Swarm' },
+    armored:  { hp: 120, speed: 50,  reward: 20,  damage: 2,  color: '#455a64', radius: 13, name: 'Armored', armor: 0.5 },
+    shielded: { hp: 80,  speed: 55,  reward: 22,  damage: 2,  color: '#3949ab', radius: 12, name: 'Shielded', shield: 80 },
+    regen:    { hp: 90,  speed: 55,  reward: 18,  damage: 2,  color: '#ec407a', radius: 12, name: 'Regen', regen: 10 },
+    splitter: { hp: 110, speed: 48,  reward: 18,  damage: 2,  color: '#26a69a', radius: 14, name: 'Splitter', splitInto: { type: 'swarm', count: 3 } },
+    healer:   { hp: 70,  speed: 50,  reward: 24,  damage: 2,  color: '#9ccc65', radius: 12, name: 'Healer', healAmount: 12, healRange: 90, healInterval: 1.2 },
+    boss:     { hp: 900, speed: 28,  reward: 120, damage: 10, color: '#111',    radius: 20, name: 'Boss', armor: 0.2 },
   };
 
   // ---------- Wave Generator ----------
@@ -155,27 +236,37 @@
 
     const hpScale = 1 + (n - 1) * 0.15;
 
-    if (n === 1) { schedule('grunt', 6, 0.9); }
-    else if (n === 2) { schedule('grunt', 10, 0.7); }
-    else if (n === 3) { schedule('grunt', 6, 0.8); schedule('fast', 4, 0.5); }
-    else if (n === 4) { schedule('swarm', 12, 0.35); }
-    else if (n === 5) { schedule('grunt', 8, 0.7); schedule('tank', 2, 2.5); }
-    else if (n === 6) { schedule('fast', 10, 0.45); schedule('grunt', 6, 0.6); }
-    else if (n === 7) { schedule('tank', 4, 2.0); schedule('swarm', 10, 0.3); }
-    else if (n === 8) { schedule('grunt', 10, 0.55); schedule('fast', 6, 0.4); schedule('tank', 2, 1.8); }
-    else if (n === 9) { schedule('swarm', 20, 0.3); schedule('fast', 6, 0.5); }
+    if (n === 1)       { schedule('grunt', 6, 0.9); }
+    else if (n === 2)  { schedule('grunt', 10, 0.7); }
+    else if (n === 3)  { schedule('grunt', 6, 0.8); schedule('fast', 4, 0.5); }
+    else if (n === 4)  { schedule('swarm', 12, 0.35); }
+    else if (n === 5)  { schedule('grunt', 6, 0.7); schedule('armored', 3, 1.4); }
+    else if (n === 6)  { schedule('fast', 10, 0.45); schedule('grunt', 6, 0.6); }
+    else if (n === 7)  { schedule('shielded', 4, 1.2); schedule('swarm', 10, 0.3); }
+    else if (n === 8)  { schedule('tank', 3, 2.0); schedule('regen', 3, 1.0); }
+    else if (n === 9)  { schedule('splitter', 4, 1.5); schedule('fast', 6, 0.5); }
     else if (n === 10) { schedule('boss', 1, 0); schedule('grunt', 10, 0.8); }
+    else if (n === 11) { schedule('healer', 2, 2.0); schedule('grunt', 10, 0.6); schedule('armored', 4, 1.2); }
+    else if (n === 12) { schedule('shielded', 6, 1.0); schedule('regen', 4, 1.2); schedule('swarm', 14, 0.3); }
+    else if (n === 13) { schedule('splitter', 6, 1.3); schedule('tank', 3, 1.8); schedule('fast', 8, 0.4); }
+    else if (n === 14) { schedule('armored', 6, 1.2); schedule('healer', 2, 2.5); schedule('shielded', 4, 1.0); }
+    else if (n === 15) { schedule('boss', 2, 3); schedule('splitter', 4, 1.4); schedule('swarm', 20, 0.25); }
     else {
-      // Procedural for later waves, scaling up.
-      const budget = 50 + n * 12;
+      // Procedural for later waves — scales up and draws from every enemy type.
+      const budget = 60 + n * 14;
       let remaining = budget;
       while (remaining > 0) {
         const r = Math.random();
-        if (r < 0.35) { schedule('grunt', 1, 0.45); remaining -= 3; }
-        else if (r < 0.6) { schedule('fast', 1, 0.35); remaining -= 3; }
-        else if (r < 0.8) { schedule('swarm', 1, 0.3); remaining -= 2; }
-        else if (r < 0.95) { schedule('tank', 1, 1.4); remaining -= 8; }
-        else { schedule('boss', 1, 2.5); remaining -= 25; }
+        if (r < 0.18)      { schedule('grunt', 1, 0.4);    remaining -= 3; }
+        else if (r < 0.33) { schedule('fast', 1, 0.3);     remaining -= 3; }
+        else if (r < 0.45) { schedule('swarm', 1, 0.25);   remaining -= 2; }
+        else if (r < 0.58) { schedule('armored', 1, 1.0);  remaining -= 6; }
+        else if (r < 0.70) { schedule('shielded', 1, 1.0); remaining -= 7; }
+        else if (r < 0.80) { schedule('regen', 1, 1.0);    remaining -= 6; }
+        else if (r < 0.88) { schedule('splitter', 1, 1.2); remaining -= 7; }
+        else if (r < 0.94) { schedule('tank', 1, 1.3);     remaining -= 8; }
+        else if (r < 0.98) { schedule('healer', 1, 2.0);   remaining -= 10; }
+        else               { schedule('boss', 1, 2.5);     remaining -= 25; }
       }
     }
 
@@ -357,12 +448,13 @@
   }
 
   // ---------- Spawning enemies ----------
-  function spawnEnemy(type, hpMul) {
+  function spawnEnemy(type, hpMul, pos, startIdx) {
     const def = ENEMY_TYPES[type];
+    const shield = def.shield ? def.shield * hpMul : 0;
     state.enemies.push({
       type,
-      x: PATH[0].x,
-      y: PATH[0].y,
+      x: (pos && pos.x) || PATH[0].x,
+      y: (pos && pos.y) || PATH[0].y,
       hp: def.hp * hpMul,
       maxHp: def.hp * hpMul,
       speed: def.speed,
@@ -371,7 +463,19 @@
       reward: def.reward,
       radius: def.radius,
       color: def.color,
-      pathIdx: 1,
+      armor: def.armor || 0,
+      shield,
+      maxShield: shield,
+      regen: def.regen || 0,
+      splitInto: def.splitInto || null,
+      healAmount: def.healAmount || 0,
+      healRange: def.healRange || 0,
+      healInterval: def.healInterval || 0,
+      healTimer: 0,
+      lastHitTime: -999,
+      poisonDamage: 0,
+      poisonTimer: 0,
+      pathIdx: (typeof startIdx === 'number') ? startIdx : 1,
       slowTimer: 0,
       slowFactor: 1,
       alive: true,
@@ -394,13 +498,41 @@
       if (!e.alive) continue;
       if (e.slowTimer > 0) {
         e.slowTimer -= dt;
-        if (e.slowTimer <= 0) {
-          e.slowFactor = 1;
+        if (e.slowTimer <= 0) e.slowFactor = 1;
+      }
+      // Poison DoT
+      if (e.poisonTimer > 0) {
+        const dmg = e.poisonDamage * dt;
+        e.hp -= dmg * (1 - (e.armor || 0) * 0.5); // armor slightly resists poison
+        e.poisonTimer -= dt;
+        if (e.poisonTimer <= 0) e.poisonDamage = 0;
+        if (e.hp <= 0) { killEnemy(e); continue; }
+      }
+      // Regen (only if hasn't been hit recently)
+      if (e.regen && e.hp < e.maxHp && state.time - e.lastHitTime > 0.6 && e.poisonTimer <= 0) {
+        e.hp = Math.min(e.maxHp, e.hp + e.regen * dt);
+      }
+      // Healer aura
+      if (e.healAmount && e.healRange) {
+        e.healTimer -= dt;
+        if (e.healTimer <= 0) {
+          e.healTimer = e.healInterval;
+          let healed = false;
+          for (const o of state.enemies) {
+            if (o === e || !o.alive) continue;
+            if (o.hp < o.maxHp && Math.hypot(o.x - e.x, o.y - e.y) <= e.healRange) {
+              o.hp = Math.min(o.maxHp, o.hp + e.healAmount);
+              healed = true;
+            }
+          }
+          if (healed) {
+            state.effects.push({ kind: 'heal', x: e.x, y: e.y, r: e.healRange, t: 0.4, max: 0.4 });
+          }
         }
       }
+
       const target = PATH[e.pathIdx];
       if (!target) {
-        // Reached end
         e.alive = false;
         state.lives -= e.damage;
         if (state.lives <= 0) {
@@ -424,19 +556,57 @@
       }
     }
 
+    // Precompute support aura buffs for each tower
+    for (const t of state.towers) {
+      t.buffDamage = 1;
+      t.buffRange = 1;
+    }
+    for (const s of state.towers) {
+      const sdef = TOWER_TYPES[s.type];
+      if (!sdef.aura) continue;
+      for (const t of state.towers) {
+        if (t === s) continue;
+        if (Math.hypot(t.x - s.x, t.y - s.y) <= sdef.range) {
+          t.buffDamage += sdef.auraDamage;
+          t.buffRange += sdef.auraRange;
+        }
+      }
+    }
+
     // Update towers (targeting & firing)
     for (const t of state.towers) {
       const def = TOWER_TYPES[t.type];
       t.cooldown = Math.max(0, t.cooldown - dt);
 
-      // Find target: enemy furthest along the path within range
+      if (def.aura) { t.beamTargets = null; continue; }
+
+      const range = def.range * (t.buffRange || 1);
+
+      // Flame: damage all enemies in range continuously
+      if (def.continuous && def.cone) {
+        const targets = [];
+        for (const e of state.enemies) {
+          if (!e.alive) continue;
+          if (Math.hypot(e.x - t.x, e.y - t.y) <= range) targets.push(e);
+        }
+        t.beamTargets = targets;
+        if (targets.length) {
+          t.angle = Math.atan2(targets[0].y - t.y, targets[0].x - t.x);
+          for (const e of targets) {
+            damageEnemy(e, def.damage * (t.buffDamage || 1) * dt);
+            if (!e.alive) continue;
+          }
+        }
+        continue;
+      }
+
+      // Pick best target (furthest along path within range)
       let target = null;
       let bestProgress = -1;
       for (const e of state.enemies) {
         if (!e.alive) continue;
         const d = Math.hypot(e.x - t.x, e.y - t.y);
-        if (d <= def.range) {
-          // "Progress" = path index + (1 - remaining distance to next waypoint)
+        if (d <= range) {
           const tgt = PATH[e.pathIdx] || PATH[PATH.length - 1];
           const rem = Math.hypot(tgt.x - e.x, tgt.y - e.y);
           const prog = e.pathIdx * 1000 - rem;
@@ -449,32 +619,52 @@
 
       if (target) {
         t.angle = Math.atan2(target.y - t.y, target.x - t.x);
+
         if (def.continuous) {
-          // Laser: instant damage per frame
-          target.hp -= def.damage * dt;
+          // Laser: single-target continuous beam
+          damageEnemy(target, def.damage * (t.buffDamage || 1) * dt);
           t.beamTarget = target;
-          if (target.hp <= 0) killEnemy(target);
+        } else if (def.chain) {
+          // Tesla: chain lightning (discrete per fireRate)
+          if (t.cooldown <= 0) {
+            fireChain(t, def, target);
+            t.cooldown = def.fireRate;
+          }
         } else if (t.cooldown <= 0) {
           fireProjectile(t, def, target);
           t.cooldown = def.fireRate;
-        } else {
-          t.beamTarget = null;
         }
       } else {
         t.beamTarget = null;
+        t.chainTargets = null;
+      }
+
+      // Fade chain visuals
+      if (t.chainTargets) {
+        t.chainVisTTL = (t.chainVisTTL || 0) - dt;
+        if (t.chainVisTTL <= 0) t.chainTargets = null;
       }
     }
 
     // Update projectiles
     for (const p of state.projectiles) {
       if (!p.alive) continue;
+      if (p.kind === 'lobbed') {
+        p.elapsed += dt;
+        const prog = Math.min(1, p.elapsed / p.flightTime);
+        p.x = p.startX + (p.targetX - p.startX) * prog;
+        p.y = p.startY + (p.targetY - p.startY) * prog;
+        if (prog >= 1) {
+          hitEnemy(p, null);
+          p.alive = false;
+        }
+        continue;
+      }
       if (p.target && p.target.alive) {
-        // Homing
         const dx = p.target.x - p.x, dy = p.target.y - p.y;
         const d = Math.hypot(dx, dy);
         const step = p.speed * dt;
         if (d <= step) {
-          // Hit
           hitEnemy(p, p.target);
           p.alive = false;
         } else {
@@ -482,12 +672,10 @@
           p.y += (dy / d) * step;
         }
       } else {
-        // Target dead; continue in last direction briefly
         p.x += Math.cos(p.angle) * p.speed * dt;
         p.y += Math.sin(p.angle) * p.speed * dt;
         p.ttl -= dt;
         if (p.ttl <= 0) p.alive = false;
-        // Check if we hit any enemy along the way
         for (const e of state.enemies) {
           if (!e.alive) continue;
           if (Math.hypot(e.x - p.x, e.y - p.y) < e.radius) {
@@ -520,16 +708,42 @@
 
   function fireProjectile(tower, def, target) {
     const angle = Math.atan2(target.y - tower.y, target.x - tower.x);
+    const dmg = def.damage * (tower.buffDamage || 1);
+    if (def.lobbed) {
+      // Mortar: lobbed shell at target's current position
+      const sx = tower.x, sy = tower.y;
+      const tx = target.x, ty = target.y;
+      const dist = Math.hypot(tx - sx, ty - sy);
+      const flight = Math.max(0.4, dist / def.bulletSpeed);
+      state.projectiles.push({
+        kind: 'lobbed',
+        startX: sx, startY: sy,
+        x: sx, y: sy,
+        targetX: tx, targetY: ty,
+        elapsed: 0,
+        flightTime: flight,
+        color: def.bulletColor,
+        outline: def.outline,
+        damage: dmg,
+        aoe: def.aoe,
+        type: tower.type,
+        alive: true,
+      });
+      return;
+    }
     state.projectiles.push({
+      kind: 'homing',
       x: tower.x,
       y: tower.y,
       angle,
       speed: def.bulletSpeed,
       color: def.bulletColor,
-      damage: def.damage,
+      damage: dmg,
       aoe: def.aoe,
       slow: def.slow,
       slowDuration: def.slowDuration,
+      poison: def.poison,
+      poisonDuration: def.poisonDuration,
       target,
       type: tower.type,
       ttl: 1.5,
@@ -537,9 +751,50 @@
     });
   }
 
+  function fireChain(tower, def, firstTarget) {
+    const hits = [firstTarget];
+    const baseDamage = def.damage * (tower.buffDamage || 1);
+    let current = firstTarget;
+    let dmg = baseDamage;
+    damageEnemy(current, dmg);
+    for (let i = 1; i < def.chain; i++) {
+      let next = null;
+      let best = Infinity;
+      for (const e of state.enemies) {
+        if (!e.alive || hits.includes(e)) continue;
+        const d = Math.hypot(e.x - current.x, e.y - current.y);
+        if (d <= def.chainRange && d < best) { best = d; next = e; }
+      }
+      if (!next) break;
+      dmg *= def.chainFalloff;
+      damageEnemy(next, dmg);
+      hits.push(next);
+      current = next;
+    }
+    tower.chainTargets = hits;
+    tower.chainVisTTL = 0.15;
+  }
+
+  function damageEnemy(enemy, dmg) {
+    if (!enemy.alive) return;
+    enemy.lastHitTime = state.time;
+    if (enemy.shield > 0) {
+      const absorbed = Math.min(enemy.shield, dmg);
+      enemy.shield -= absorbed;
+      dmg -= absorbed;
+    }
+    if (dmg > 0 && enemy.armor) dmg *= (1 - enemy.armor);
+    enemy.hp -= dmg;
+    if (enemy.hp <= 0) killEnemy(enemy);
+  }
+
+  function applyPoison(enemy, dps, duration) {
+    enemy.poisonDamage = Math.max(enemy.poisonDamage, dps);
+    enemy.poisonTimer = Math.max(enemy.poisonTimer, duration);
+  }
+
   function hitEnemy(proj, enemy) {
     if (proj.aoe > 0) {
-      // AoE: damage all within radius
       state.effects.push({
         kind: 'explosion',
         x: proj.x,
@@ -551,17 +806,18 @@
       for (const e of state.enemies) {
         if (!e.alive) continue;
         if (Math.hypot(e.x - proj.x, e.y - proj.y) <= proj.aoe) {
-          e.hp -= proj.damage;
-          if (e.hp <= 0) killEnemy(e);
+          damageEnemy(e, proj.damage);
         }
       }
     } else {
-      enemy.hp -= proj.damage;
-      if (proj.slow) {
+      damageEnemy(enemy, proj.damage);
+      if (proj.slow && enemy.alive) {
         enemy.slowFactor = proj.slow;
         enemy.slowTimer = proj.slowDuration;
       }
-      if (enemy.hp <= 0) killEnemy(enemy);
+      if (proj.poison && enemy.alive) {
+        applyPoison(enemy, proj.poison, proj.poisonDuration);
+      }
     }
   }
 
@@ -579,6 +835,17 @@
       max: 0.25,
       color: enemy.color,
     });
+    // Split into smaller enemies if applicable
+    if (enemy.splitInto) {
+      const { type, count } = enemy.splitInto;
+      for (let i = 0; i < count; i++) {
+        const offset = (i - (count - 1) / 2) * 12;
+        const angle = Math.random() * Math.PI * 2;
+        const px = enemy.x + Math.cos(angle) * 6 + offset * 0.5;
+        const py = enemy.y + Math.sin(angle) * 6;
+        spawnEnemy(type, enemy.maxHp / ENEMY_TYPES[enemy.type].hp, { x: px, y: py }, enemy.pathIdx);
+      }
+    }
     updateUI();
   }
 
@@ -695,7 +962,14 @@
   }
 
   function drawEnemy(e) {
-    const def = ENEMY_TYPES[e.type];
+    // Armor plating under the body
+    if (e.armor) {
+      ctx.fillStyle = '#90a4ae';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius + 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.fillStyle = e.color;
     ctx.beginPath();
     ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
@@ -703,6 +977,40 @@
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 2;
     ctx.stroke();
+
+    // Poison visual
+    if (e.poisonTimer > 0) {
+      ctx.fillStyle = 'rgba(150,255,80,0.35)';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius + 1, 0, Math.PI * 2);
+      ctx.fill();
+      // bubbles
+      const ph = (state.time * 4 + e.x * 0.1) % 1;
+      ctx.fillStyle = 'rgba(180,255,120,0.9)';
+      ctx.beginPath();
+      ctx.arc(e.x + Math.cos(ph * 6) * 4, e.y - e.radius + ph * 8 - 4, 2 - ph * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Regen glow
+    if (e.regen && state.time - e.lastHitTime > 0.6 && e.hp < e.maxHp) {
+      ctx.strokeStyle = 'rgba(255,100,180,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius + 4 + Math.sin(state.time * 6) * 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Shield bubble
+    if (e.shield > 0) {
+      ctx.strokeStyle = `rgba(100,180,255,${0.4 + 0.4 * (e.shield / e.maxShield)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(100,180,255,0.12)';
+      ctx.fill();
+    }
 
     // Slow indicator
     if (e.slowFactor < 1) {
@@ -713,13 +1021,29 @@
       ctx.stroke();
     }
 
+    // Healer cross
+    if (e.healAmount) {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(e.x - 1.5, e.y - 5, 3, 10);
+      ctx.fillRect(e.x - 5, e.y - 1.5, 10, 3);
+    }
+
     // HP bar
-    const hpPct = e.hp / e.maxHp;
+    const hpPct = Math.max(0, e.hp / e.maxHp);
     const bw = e.radius * 2 + 6;
     ctx.fillStyle = '#000';
     ctx.fillRect(e.x - bw / 2, e.y - e.radius - 8, bw, 4);
     ctx.fillStyle = hpPct > 0.5 ? '#4caf50' : hpPct > 0.25 ? '#ffeb3b' : '#f44336';
     ctx.fillRect(e.x - bw / 2, e.y - e.radius - 8, bw * hpPct, 4);
+
+    // Shield bar (above HP)
+    if (e.maxShield > 0) {
+      const sp = e.shield / e.maxShield;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(e.x - bw / 2, e.y - e.radius - 13, bw, 3);
+      ctx.fillStyle = '#64b5f6';
+      ctx.fillRect(e.x - bw / 2, e.y - e.radius - 13, bw * sp, 3);
+    }
 
     // Boss crown
     if (e.type === 'boss') {
@@ -736,6 +1060,26 @@
   }
 
   function drawProjectile(p) {
+    if (p.kind === 'lobbed') {
+      // Arc height ~40-60 based on elapsed progress
+      const prog = Math.min(1, p.elapsed / p.flightTime);
+      const arcY = -Math.sin(prog * Math.PI) * 40;
+      ctx.fillStyle = p.outline || '#000';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + arcY + 2, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + arcY, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Target marker
+      ctx.strokeStyle = 'rgba(255,80,80,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(p.targetX, p.targetY, 6 + prog * 6, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
@@ -760,14 +1104,40 @@
         ctx.arc(ef.x, ef.y, ef.r * (1 - a) + ef.r * 0.3, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
+      } else if (ef.kind === 'heal') {
+        ctx.strokeStyle = `rgba(180,255,120,${a * 0.8})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.r * (1 - a * 0.2), 0, Math.PI * 2);
+        ctx.stroke();
       }
     }
   }
 
   function drawBeams() {
     for (const t of state.towers) {
-      if (t.beamTarget && t.beamTarget.alive) {
-        const def = TOWER_TYPES[t.type];
+      const def = TOWER_TYPES[t.type];
+      // Flame: cone spraying to every enemy in range
+      if (def.continuous && def.cone && t.beamTargets && t.beamTargets.length) {
+        ctx.strokeStyle = '#ffab91';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#ff5722';
+        ctx.shadowBlur = 14;
+        for (const e of t.beamTargets) {
+          if (!e.alive) continue;
+          const grad = ctx.createLinearGradient(t.x, t.y, e.x, e.y);
+          grad.addColorStop(0, 'rgba(255,224,130,0.9)');
+          grad.addColorStop(1, 'rgba(255,87,34,0.5)');
+          ctx.strokeStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(t.x, t.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+      }
+      // Laser single beam
+      if (def.continuous && !def.cone && t.beamTarget && t.beamTarget.alive) {
         ctx.strokeStyle = def.bulletColor;
         ctx.lineWidth = 3;
         ctx.shadowColor = def.color;
@@ -777,6 +1147,40 @@
         ctx.lineTo(t.beamTarget.x, t.beamTarget.y);
         ctx.stroke();
         ctx.shadowBlur = 0;
+      }
+      // Tesla chain
+      if (def.chain && t.chainTargets && t.chainVisTTL > 0) {
+        ctx.strokeStyle = '#e0f7fa';
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 18;
+        ctx.lineWidth = 2.5;
+        let prev = { x: t.x, y: t.y };
+        for (const e of t.chainTargets) {
+          ctx.beginPath();
+          // jagged lightning line
+          const dx = e.x - prev.x, dy = e.y - prev.y;
+          const steps = 6;
+          ctx.moveTo(prev.x, prev.y);
+          for (let i = 1; i < steps; i++) {
+            const t2 = i / steps;
+            const nx = prev.x + dx * t2 + (Math.random() - 0.5) * 10;
+            const ny = prev.y + dy * t2 + (Math.random() - 0.5) * 10;
+            ctx.lineTo(nx, ny);
+          }
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+          prev = e;
+        }
+        ctx.shadowBlur = 0;
+      }
+      // Support aura pulse
+      if (def.aura) {
+        const pulse = 0.5 + 0.5 * Math.sin(state.time * 3);
+        ctx.strokeStyle = `rgba(255,224,130,${0.15 + pulse * 0.25})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, def.range, 0, Math.PI * 2);
+        ctx.stroke();
       }
     }
   }
