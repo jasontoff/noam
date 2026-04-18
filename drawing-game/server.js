@@ -85,6 +85,10 @@ const ROUND_TIME = 75;        // seconds to draw
 const WORD_CHOICE_TIME = 12;  // seconds to pick
 const ROUND_END_TIME = 6;     // seconds between rounds
 const MIN_PLAYERS = 2;
+// Timer pauses while a guesser is typing only when <= this much time is left.
+const TYPING_PAUSE_THRESHOLD_MS = 15 * 1000;
+// Hard cap so the pause can't be abused to stall the round forever.
+const MAX_PAUSE_PER_ROUND_MS = 20 * 1000;
 
 const GAME = {
   players: {},          // id -> { id, name, score, color, guessedThisRound, isDrawer }
@@ -98,6 +102,9 @@ const GAME = {
   strokes: [],          // for late joiners this round
   roundScores: {},      // id -> points earned this round
   roundNumber: 0,
+  typingGuessers: new Set(), // socket ids currently typing a guess
+  pausedAt: null,       // Date.now() when pause started, or null
+  pauseUsedMs: 0,       // total paused ms this round (capped at MAX_PAUSE_PER_ROUND_MS)
 };
 
 const COLORS = [
@@ -138,10 +145,34 @@ function broadcastState(extra = {}) {
     wordMask: GAME.word ? maskWord(GAME.word) : null,
     wordLength: GAME.word ? GAME.word.length : null,
     roundEndsAt: GAME.roundEndsAt,
+    pausedAt: GAME.pausedAt,
     players: publicPlayerList(),
     roundNumber: GAME.roundNumber,
     ...extra,
   });
+}
+
+function maybePause() {
+  if (GAME.pausedAt) return;
+  if (GAME.state !== 'drawing') return;
+  if (GAME.typingGuessers.size === 0) return;
+  if (GAME.pauseUsedMs >= MAX_PAUSE_PER_ROUND_MS) return;
+  const msLeft = GAME.roundEndsAt - Date.now();
+  if (msLeft > TYPING_PAUSE_THRESHOLD_MS) return;
+  GAME.pausedAt = Date.now();
+  broadcastState();
+}
+
+function maybeResume() {
+  if (!GAME.pausedAt) return;
+  if (GAME.typingGuessers.size > 0 && GAME.pauseUsedMs < MAX_PAUSE_PER_ROUND_MS) return;
+  const pauseDur = Date.now() - GAME.pausedAt;
+  const remainingBudget = Math.max(0, MAX_PAUSE_PER_ROUND_MS - GAME.pauseUsedMs);
+  const credited = Math.min(pauseDur, remainingBudget);
+  GAME.roundEndsAt += credited;
+  GAME.pauseUsedMs += credited;
+  GAME.pausedAt = null;
+  broadcastState();
 }
 
 function startGameIfReady() {
@@ -159,6 +190,9 @@ function nextTurn() {
   GAME.word = null;
   GAME.wordChoices = [];
   GAME.roundScores = {};
+  GAME.typingGuessers.clear();
+  GAME.pausedAt = null;
+  GAME.pauseUsedMs = 0;
   for (const p of Object.values(GAME.players)) {
     p.guessedThisRound = false;
   }
@@ -204,19 +238,33 @@ function startRound(word) {
   // only the drawer knows the real word
   io.to(GAME.drawerId).emit('yourWord', word);
   broadcastState();
+  scheduleRoundEnd();
+}
 
-  // end the round when timer expires
+// Re-schedule round-end, accounting for pauses that extend roundEndsAt.
+function scheduleRoundEnd() {
   const roundToken = GAME.roundNumber;
-  setTimeout(() => {
-    if (GAME.state === 'drawing' && GAME.roundNumber === roundToken) {
-      endRound('time');
+  const tick = () => {
+    if (GAME.state !== 'drawing' || GAME.roundNumber !== roundToken) return;
+    if (GAME.pausedAt) {
+      setTimeout(tick, 500);
+      return;
     }
-  }, ROUND_TIME * 1000 + 200);
+    const msLeft = GAME.roundEndsAt - Date.now();
+    if (msLeft <= 0) {
+      endRound('time');
+      return;
+    }
+    setTimeout(tick, msLeft + 50);
+  };
+  setTimeout(tick, ROUND_TIME * 1000 + 100);
 }
 
 function endRound(reason) {
   GAME.state = 'roundEnd';
   GAME.roundEndsAt = Date.now() + ROUND_END_TIME * 1000;
+  GAME.typingGuessers.clear();
+  GAME.pausedAt = null;
 
   const revealed = GAME.word;
   const scoresThisRound = { ...GAME.roundScores };
@@ -265,6 +313,7 @@ io.on('connection', (socket) => {
     drawerId: GAME.drawerId,
     wordMask: GAME.word ? maskWord(GAME.word) : null,
     roundEndsAt: GAME.roundEndsAt,
+    pausedAt: GAME.pausedAt,
     strokes: GAME.strokes,
     roundNumber: GAME.roundNumber,
   });
@@ -296,6 +345,7 @@ io.on('connection', (socket) => {
 
   socket.on('stroke', (s) => {
     if (socket.id !== GAME.drawerId || GAME.state !== 'drawing') return;
+    if (GAME.pausedAt) return; // drawing frozen while a guesser is typing
     // Basic sanity — coords are expected to be 0..1 floats
     if (typeof s !== 'object' || s === null) return;
     const stroke = {
@@ -314,8 +364,25 @@ io.on('connection', (socket) => {
 
   socket.on('clearCanvas', () => {
     if (socket.id !== GAME.drawerId || GAME.state !== 'drawing') return;
+    if (GAME.pausedAt) return;
     GAME.strokes = [];
     io.emit('clearCanvas');
+  });
+
+  socket.on('typingStart', () => {
+    const p = GAME.players[socket.id];
+    if (!p) return;
+    if (socket.id === GAME.drawerId) return;
+    if (p.guessedThisRound) return;
+    if (GAME.state !== 'drawing') return;
+    if (GAME.typingGuessers.has(socket.id)) return;
+    GAME.typingGuessers.add(socket.id);
+    maybePause();
+  });
+
+  socket.on('typingStop', () => {
+    if (!GAME.typingGuessers.delete(socket.id)) return;
+    maybeResume();
   });
 
   socket.on('guess', (rawText) => {
@@ -364,6 +431,8 @@ io.on('connection', (socket) => {
           text: `✓ ${player.name} guessed the word! +${points}`,
         });
         socket.emit('youGuessed', { word: GAME.word, points });
+        // if this guesser was typing, release any pause they were holding
+        if (GAME.typingGuessers.delete(socket.id)) maybeResume();
         broadcastState();
 
         // end early if everyone (except drawer) has guessed
@@ -393,6 +462,8 @@ io.on('connection', (socket) => {
     if (!player) return;
     io.emit('chat', { system: true, text: `${player.name} left.` });
     delete GAME.players[socket.id];
+    // clean up typing state (releases pause if they were the last typer)
+    if (GAME.typingGuessers.delete(socket.id)) maybeResume();
     // if the drawer left, end the round immediately
     if (GAME.drawerId === socket.id) {
       if (GAME.state === 'drawing' || GAME.state === 'choosing') {
@@ -408,7 +479,17 @@ io.on('connection', (socket) => {
 
 // Periodic state ping so clients keep the timer in sync
 setInterval(() => {
-  io.emit('tick', { now: Date.now(), roundEndsAt: GAME.roundEndsAt, state: GAME.state });
+  // If guessers started typing above the threshold, re-check now that
+  // time has ticked down into it.
+  if (!GAME.pausedAt && GAME.state === 'drawing' && GAME.typingGuessers.size > 0) {
+    maybePause();
+  }
+  io.emit('tick', {
+    now: Date.now(),
+    roundEndsAt: GAME.roundEndsAt,
+    pausedAt: GAME.pausedAt,
+    state: GAME.state,
+  });
 }, 1000);
 
 function getLocalIP() {

@@ -9,7 +9,11 @@ let me = { id: null, name: null };
 let gameState = 'waiting';
 let drawerId = null;
 let roundEndsAt = 0;
+let pausedAt = null;           // timestamp when server paused the timer, or null
+let isTyping = false;          // have we told the server we're currently typing?
+let myGuessedThisRound = false;
 let isDrawer = () => drawerId === me.id;
+const TYPING_PAUSE_THRESHOLD_MS = 15 * 1000;
 
 // === DOM ===
 const canvas = document.getElementById('canvas');
@@ -30,6 +34,7 @@ const loginModal = document.getElementById('login');
 const nameInput = document.getElementById('name-input');
 const joinBtn = document.getElementById('join-btn');
 const clearBtn = document.getElementById('clear-btn');
+const pauseBanner = document.getElementById('pause-banner');
 
 // === Login ===
 joinBtn.addEventListener('click', doJoin);
@@ -79,13 +84,14 @@ function clearCanvas() {
 clearCanvas();
 
 function startStroke(evt) {
-  if (!isDrawer() || gameState !== 'drawing') return;
+  if (!isDrawer() || gameState !== 'drawing' || pausedAt) return;
   evt.preventDefault();
   drawing = true;
   lastPos = canvasToNorm(evt);
 }
 function moveStroke(evt) {
   if (!drawing) return;
+  if (pausedAt) { endStroke(); return; }
   evt.preventDefault();
   const p = canvasToNorm(evt);
   const stroke = {
@@ -130,10 +136,15 @@ clearBtn.addEventListener('click', () => {
 });
 
 function updateToolbar() {
-  if (isDrawer() && gameState === 'drawing') {
+  if (isDrawer() && gameState === 'drawing' && !pausedAt) {
     toolbar.classList.remove('disabled');
   } else {
     toolbar.classList.add('disabled');
+  }
+  if (pausedAt && gameState === 'drawing') {
+    pauseBanner.classList.remove('hidden');
+  } else {
+    pauseBanner.classList.add('hidden');
   }
 }
 
@@ -144,7 +155,34 @@ guessForm.addEventListener('submit', (e) => {
   if (!text) return;
   socket.emit('guess', text);
   guessInput.value = '';
+  stopTypingIfNeeded();
 });
+
+// Track "is the guesser actively typing a guess" so the server can
+// pause the timer (only while time is low) and freeze the drawer.
+function shouldBeTyping() {
+  if (isDrawer()) return false;
+  if (gameState !== 'drawing') return false;
+  if (myGuessedThisRound) return false;
+  if (!guessInput.value.trim()) return false;
+  const msLeft = roundEndsAt - (pausedAt || Date.now());
+  return msLeft > 0 && msLeft <= TYPING_PAUSE_THRESHOLD_MS;
+}
+function startTypingIfNeeded() {
+  if (isTyping || !shouldBeTyping()) return;
+  isTyping = true;
+  socket.emit('typingStart');
+}
+function stopTypingIfNeeded() {
+  if (!isTyping) return;
+  isTyping = false;
+  socket.emit('typingStop');
+}
+guessInput.addEventListener('input', () => {
+  if (shouldBeTyping()) startTypingIfNeeded();
+  else stopTypingIfNeeded();
+});
+guessInput.addEventListener('blur', stopTypingIfNeeded);
 
 // === Socket events ===
 socket.on('init', (data) => {
@@ -152,6 +190,7 @@ socket.on('init', (data) => {
   drawerId = data.drawerId;
   gameState = data.state;
   roundEndsAt = data.roundEndsAt || 0;
+  pausedAt = data.pausedAt || null;
   clearCanvas();
   if (data.strokes) data.strokes.forEach(drawSegment);
   renderPlayers(data.players || []);
@@ -162,6 +201,13 @@ socket.on('init', (data) => {
 socket.on('state', (s) => {
   gameState = s.state;
   drawerId = s.drawerId;
+  pausedAt = s.pausedAt || null;
+  // New round? reset local flags.
+  if (s.state === 'choosing' || s.state === 'drawing') {
+    const mine = (s.players || []).find(p => p.id === me.id);
+    myGuessedThisRound = !!(mine && mine.guessed);
+  }
+  if (s.state !== 'drawing') { isTyping = false; }
   roundEndsAt = s.roundEndsAt || 0;
   renderPlayers(s.players || []);
   if (s.wordMask) {
@@ -222,10 +268,17 @@ socket.on('chat', (msg) => {
 socket.on('youGuessed', (data) => {
   window.__myWord = data.word;
   wordDisplay.textContent = data.word;
+  myGuessedThisRound = true;
+  // Don't hold a pause on behalf of a player who's already solved it.
+  isTyping = false;
+  guessInput.value = '';
 });
 
 socket.on('roundEnd', (data) => {
   window.__myWord = null;
+  pausedAt = null;
+  isTyping = false;
+  myGuessedThisRound = false;
   overlay.classList.remove('hidden');
   overlayTitle.textContent = `The word was: "${data.word}"`;
   const reasonText = {
@@ -256,6 +309,12 @@ socket.on('roundEnd', (data) => {
 
 socket.on('tick', (t) => {
   roundEndsAt = t.roundEndsAt || roundEndsAt;
+  pausedAt = t.pausedAt || null;
+  // If time dropped into the pause-threshold while we already had text
+  // typed, fire typingStart now.
+  if (shouldBeTyping()) startTypingIfNeeded();
+  else stopTypingIfNeeded();
+  updateToolbar();
 });
 
 // === Rendering ===
@@ -310,10 +369,17 @@ function escapeHtml(s) {
   }[c]));
 }
 
-// Local timer tick
+// Local timer tick — when paused, show the value at the moment the pause
+// began (frozen) with a ⏸ prefix.
 setInterval(() => {
   if (!roundEndsAt) { timerEl.textContent = '--'; return; }
-  const left = Math.max(0, Math.round((roundEndsAt - Date.now()) / 1000));
-  timerEl.textContent = left + 's';
-  timerEl.style.color = left <= 10 ? '#fca5a5' : '';
+  const referenceTime = pausedAt || Date.now();
+  const left = Math.max(0, Math.round((roundEndsAt - referenceTime) / 1000));
+  if (pausedAt) {
+    timerEl.textContent = `⏸ ${left}s`;
+    timerEl.style.color = '#fde047';
+  } else {
+    timerEl.textContent = left + 's';
+    timerEl.style.color = left <= 10 ? '#fca5a5' : '';
+  }
 }, 200);

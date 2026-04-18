@@ -44,6 +44,13 @@
     .canvas-overlay.hidden { display: none; }
     .canvas-overlay h2 { margin: 0 0 12px; font-size: 24px; }
     .canvas-overlay p { margin: 4px 0; color: #cbd5e1; }
+    .pause-banner {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(253, 224, 71, 0.95); color: #422006; font-weight: bold;
+      padding: 8px 16px; border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-size: 14px; pointer-events: none; z-index: 5;
+    }
+    .pause-banner.hidden { display: none; }
     .choices { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
     .choice-btn { background: #a855f7; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: transform 0.1s; }
     .choice-btn:hover { background: #c084fc; transform: translateY(-2px); }
@@ -114,6 +121,7 @@
     <section class="canvas-area">
       <div class="canvas-wrap">
         <canvas id="canvas" width="1600" height="1000"></canvas>
+        <div id="pause-banner" class="pause-banner hidden">⏸ Someone is typing a guess…</div>
         <div id="overlay" class="canvas-overlay">
           <h2 id="overlay-title">Waiting for players…</h2>
           <p id="overlay-text">Need at least 2 players to start.</p>
