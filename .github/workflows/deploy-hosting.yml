@@ -8,6 +8,7 @@ on:
       - 'fps-game/firebase.json'
       - 'fps-game/.firebaserc'
       - 'racing-game/public/**'
+      - 'drawing-game/public/**'
       - '.github/workflows/deploy-hosting.yml'
   workflow_dispatch:
 
@@ -31,6 +32,10 @@ jobs:
           cp ../racing-game/public/index.html hosting-public/racing-game/
           cp ../racing-game/public/game.js hosting-public/racing-game/
 
+          mkdir -p hosting-public/drawing-game
+          cp ../drawing-game/public/index.html hosting-public/drawing-game/
+          cp ../drawing-game/public/game.js hosting-public/drawing-game/
+
           cat > hosting-public/index.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en"><head><meta charset="UTF-8"><title>noam.bot</title>
@@ -44,6 +49,7 @@ jobs:
           <div class="games">
             <a href="/fps-game/">Play FPS Arena</a>
             <a href="/racing-game/">Play Racing</a>
+            <a href="/drawing-game/">Play Doodle Duel</a>
           </div></body></html>
           EOF
 

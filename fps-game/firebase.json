@@ -21,6 +21,15 @@
             "value": "no-cache"
           }
         ]
+      },
+      {
+        "source": "/drawing-game/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ]
   }
