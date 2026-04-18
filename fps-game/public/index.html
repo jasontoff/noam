@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPS Arena</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
+    canvas { display: block; }
+
+    #blocker {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); display: flex; align-items: center;
+      justify-content: center; z-index: 100; flex-direction: column;
+    }
+    #blocker h1 { color: #0f0; font-size: 48px; margin-bottom: 20px; text-shadow: 0 0 20px #0f0; }
+    #blocker p { color: #aaa; font-size: 18px; margin: 5px 0; }
+    #blocker .start-info { color: #0f0; font-size: 22px; margin-top: 30px; cursor: pointer; }
+    #blocker .start-info:hover { text-shadow: 0 0 10px #0f0; }
+    #nameInput {
+      background: #111; border: 2px solid #0f0; color: #0f0; padding: 10px 20px;
+      font-size: 20px; font-family: 'Courier New', monospace; text-align: center;
+      margin: 20px 0; outline: none; width: 300px;
+    }
+
+    #weapon-select {
+      display: flex; gap: 10px; margin: 15px 0; flex-wrap: wrap; justify-content: center;
+    }
+    .weapon-btn {
+      background: #111; border: 2px solid #444; color: #ccc; padding: 10px 14px;
+      font-family: 'Courier New', monospace; font-size: 13px; cursor: pointer;
+      transition: all 0.2s; text-align: center; min-width: 100px; border-radius: 4px;
+    }
+    .weapon-btn:hover { border-color: #0f0; color: #0f0; }
+    .weapon-btn.selected { border-color: #0f0; color: #0f0; background: #0a1a0a; box-shadow: 0 0 10px rgba(0,255,0,0.3); }
+    .weapon-btn .wname { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+    .weapon-btn .wstats { font-size: 11px; color: #888; }
+    .weapon-btn.selected .wstats { color: #0a0; }
+
+    #weapon-hud {
+      position: fixed; bottom: 55px; left: 20px; z-index: 50;
+      color: #0f0; font-size: 14px;
+    }
+
+    #hud {
+      position: fixed; bottom: 20px; left: 20px; z-index: 50;
+      color: #fff; font-size: 16px;
+    }
+    #health-bar {
+      width: 200px; height: 20px; background: #333; border: 2px solid #fff; margin-top: 5px;
+    }
+    #health-fill { height: 100%; background: #0f0; transition: width 0.2s, background-color 0.2s; }
+
+    #crosshair {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 50; pointer-events: none;
+    }
+    #crosshair div {
+      position: absolute; background: rgba(255,255,255,0.8);
+    }
+    .ch-top { width: 2px; height: 12px; left: -1px; top: -18px; }
+    .ch-bottom { width: 2px; height: 12px; left: -1px; top: 6px; }
+    .ch-left { width: 12px; height: 2px; left: -18px; top: -1px; }
+    .ch-right { width: 12px; height: 2px; left: 6px; top: -1px; }
+
+    #scoreboard {
+      position: fixed; top: 20px; right: 20px; z-index: 50;
+      color: #fff; font-size: 14px; background: rgba(0,0,0,0.5);
+      padding: 10px 15px; border-radius: 5px; min-width: 180px;
+    }
+    #scoreboard h3 { margin-bottom: 8px; color: #0f0; font-size: 16px; }
+    .score-entry { display: flex; justify-content: space-between; margin: 3px 0; }
+    .score-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+
+    #killfeed {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 50; text-align: center;
+    }
+    .kill-msg {
+      color: #ff4444; font-size: 18px; padding: 5px;
+      animation: fadeOut 3s forwards; font-weight: bold;
+    }
+    @keyframes fadeOut { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+    #death-screen {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 60; color: #ff0000; font-size: 48px; font-weight: bold;
+      text-shadow: 0 0 20px #ff0000; display: none; text-align: center;
+    }
+    #death-screen .sub { font-size: 20px; color: #aaa; margin-top: 10px; }
+
+    #char-select-row {
+      display: flex; align-items: center; gap: 12px; margin: 10px 0;
+    }
+    #char-avatar {
+      width: 80px; height: 80px; border: 2px solid #0f0; border-radius: 8px;
+      cursor: pointer; background: #111; object-fit: contain; padding: 4px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    #char-avatar:hover { border-color: #4f4; transform: scale(1.1); }
+    #char-nav { display: flex; flex-direction: column; gap: 4px; }
+    .char-nav-btn {
+      background: #111; border: 2px solid #444; color: #0f0; width: 28px; height: 28px;
+      font-size: 18px; cursor: pointer; border-radius: 4px; font-family: 'Courier New', monospace;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .char-nav-btn:hover { border-color: #0f0; }
+
+    #ammo-display {
+      position: fixed; bottom: 20px; right: 20px; z-index: 50;
+      color: #fff; font-size: 24px; text-align: right;
+    }
+
+    #minimap {
+      position: fixed; bottom: 20px; right: 20px; z-index: 50;
+      width: 150px; height: 150px; background: rgba(0,0,0,0.6);
+      border: 2px solid #444; border-radius: 5px;
+    }
+
+    #damage-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 40; pointer-events: none; opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(255,0,0,0.6) 100%);
+      transition: opacity 0.1s;
+    }
+  </style>
+</head>
+<body>
+
+<div id="blocker">
+  <h1>FPS ARENA</h1>
+  <p>WASD - Move | Mouse - Look | Click - Shoot/Slash | Space - Jump</p>
+  <p>1-5 Switch Guns | 6 Knife | Q Special | ESC Pause</p>
+  <div id="char-select-row">
+    <div id="char-nav">
+      <button class="char-nav-btn" id="char-prev">&#9650;</button>
+      <button class="char-nav-btn" id="char-next">&#9660;</button>
+    </div>
+    <img id="char-avatar" src="" id="char-avatar-placeholder" title="Click to change character">
+    <input type="text" id="nameInput" placeholder="Enter your name" maxlength="20" value="">
+  </div>
+  <p style="color:#0f0; margin-top:15px;">CHOOSE YOUR GUN:</p>
+  <div id="weapon-select">
+    <div class="weapon-btn selected" data-weapon="pistol">
+      <div class="wname">PISTOL</div>
+      <div class="wstats">DMG: 20 | Fast</div>
+    </div>
+    <div class="weapon-btn" data-weapon="shotgun">
+      <div class="wname">SHOTGUN</div>
+      <div class="wstats">DMG: 12x6 | Slow</div>
+    </div>
+    <div class="weapon-btn" data-weapon="sniper">
+      <div class="wname">SNIPER</div>
+      <div class="wstats">DMG: 75 | V.Slow</div>
+    </div>
+    <div class="weapon-btn" data-weapon="minigun">
+      <div class="wname">MINIGUN</div>
+      <div class="wstats">DMG: 8 | V.Fast</div>
+    </div>
+    <div class="weapon-btn" data-weapon="rocket">
+      <div class="wname">ROCKET</div>
+      <div class="wstats">DMG: 40 | Explosive</div>
+    </div>
+  </div>
+  <p style="color:#888; font-size:13px;">You always have a KNIFE (press 2) — 50 DMG melee!</p>
+  <p style="color:#0f0; margin-top:15px;">CHOOSE YOUR SPECIAL:</p>
+  <div id="ability-select">
+    <div class="weapon-btn selected" data-ability="speed">
+      <div class="wname">SPEED BOOTS</div>
+      <div class="wstats">2x speed for 5s</div>
+    </div>
+    <div class="weapon-btn" data-ability="shield">
+      <div class="wname">SHIELD</div>
+      <div class="wstats">Block damage for 4s</div>
+    </div>
+    <div class="weapon-btn" data-ability="wings">
+      <div class="wname">WINGS</div>
+      <div class="wstats">Fly for 6s</div>
+    </div>
+    <div class="weapon-btn" data-ability="heal">
+      <div class="wname">HEAL</div>
+      <div class="wstats">Full health restore</div>
+    </div>
+  </div>
+  <p style="color:#888; font-size:13px;">Press Q to use your special ability</p>
+  <div class="start-info" id="startBtn">[ CLICK TO PLAY ]</div>
+  <p style="color:#555; font-size:14px; margin-top:30px;">A game by Noam, Ira and Daddy</p>
+</div>
+
+<div id="crosshair">
+  <div class="ch-top"></div>
+  <div class="ch-bottom"></div>
+  <div class="ch-left"></div>
+  <div class="ch-right"></div>
+</div>
+
+<div id="hud">
+  <div id="weapon-hud" style="margin-bottom:4px;"></div>
+  <div id="ability-hud" style="color:#0ff; font-size:13px; margin-bottom:6px;"></div>
+  <div id="health-text" style="margin-bottom:2px;">HP: 100</div>
+  <div id="health-bar"><div id="health-fill" style="width:100%"></div></div>
+</div>
+
+<div id="scoreboard">
+  <h3>SCOREBOARD</h3>
+  <div id="score-list"></div>
+</div>
+
+<div id="killfeed"></div>
+<div id="death-screen">YOU DIED<div class="sub">Respawning...</div></div>
+<div id="damage-overlay"></div>
+
+<div id="pause-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.7); z-index:90; align-items:center; justify-content:center; flex-direction:column; cursor:pointer;">
+  <h1 style="color:#0f0; font-size:48px; text-shadow:0 0 20px #0f0; font-family:'Courier New',monospace;">PAUSED</h1>
+  <p style="color:#aaa; font-size:20px; margin-top:20px; font-family:'Courier New',monospace;">Click anywhere to resume</p>
+</div>
+
+<div id="weapon-popup" style="display:none; position:fixed; top:40%; left:50%; transform:translate(-50%,-50%);
+  z-index:55; pointer-events:none; text-align:center;">
+  <div id="weapon-popup-text" style="color:#0f0; font-size:28px; font-weight:bold;
+    font-family:'Courier New',monospace; text-shadow:0 0 15px rgba(0,255,0,0.5);"></div>
+</div>
+
+<div id="minimap"><canvas id="minimap-canvas" width="150" height="150"></canvas></div>
+
+<div id="version-display" style="position:fixed; bottom:5px; right:160px; z-index:50; color:#444; font-size:11px; font-family:'Courier New',monospace;"></div>
+
+<div id="update-banner" style="display:none; position:fixed; top:0; left:0; width:100%; z-index:200;
+  background:#ff4400; color:#fff; text-align:center; padding:10px; font-family:'Courier New',monospace;
+  font-size:16px; cursor:pointer;">
+  New version available! Tap here to update.
+</div>
+
+<script>
+  // Load socket.io from CDN so it works both locally and when hosted on Firebase
+</script>
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="game.js?v=2"></script>
+</body>
+</html>

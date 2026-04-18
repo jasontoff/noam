@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+hosting-public/
+firebase-debug.log
+*.log
+.claude/settings.local.json
+.firebase/

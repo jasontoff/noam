@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "gen-lang-client-0448267425"
+  },
+  "targets": {
+    "gen-lang-client-0448267425": {
+      "hosting": {
+        "noam": [
+          "noam-bot"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
