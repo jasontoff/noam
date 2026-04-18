@@ -86,16 +86,23 @@ function setupInput() {
 
 function buildTrack() {
   const waypoints = [
-    new THREE.Vector3(0, 0, 120),
-    new THREE.Vector3(90, 0, 100),
-    new THREE.Vector3(140, 0, 40),
-    new THREE.Vector3(130, 0, -50),
-    new THREE.Vector3(70, 0, -110),
-    new THREE.Vector3(-20, 0, -140),
-    new THREE.Vector3(-110, 0, -110),
-    new THREE.Vector3(-150, 0, -30),
-    new THREE.Vector3(-130, 0, 50),
-    new THREE.Vector3(-70, 0, 110),
+    new THREE.Vector3(   0, 0,  160),  // start/finish straight
+    new THREE.Vector3(  70, 0,  170),
+    new THREE.Vector3( 150, 0,  140),  // T1 right
+    new THREE.Vector3( 190, 0,   70),
+    new THREE.Vector3( 180, 0,  -10),  // long right sweeper
+    new THREE.Vector3( 200, 0,  -80),
+    new THREE.Vector3( 150, 0, -140),  // T4
+    new THREE.Vector3(  80, 0, -170),
+    new THREE.Vector3(   0, 0, -190),  // back straight
+    new THREE.Vector3( -80, 0, -175),
+    new THREE.Vector3(-140, 0, -130),
+    new THREE.Vector3(-100, 0,  -70),  // chicane pinch inward
+    new THREE.Vector3(-170, 0,  -40),  // chicane back out
+    new THREE.Vector3(-195, 0,   40),
+    new THREE.Vector3(-155, 0,  110),  // final curve
+    new THREE.Vector3( -80, 0,  140),
+    new THREE.Vector3( -30, 0,  150),
   ];
   trackCurve = new THREE.CatmullRomCurve3(waypoints, true, 'catmullrom', 0.5);
   trackLength = trackCurve.getLength();
@@ -130,27 +137,20 @@ function buildTrack() {
   geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geom.setIndex(indices);
   geom.computeVertexNormals();
-  const trackMesh = new THREE.Mesh(geom, new THREE.MeshLambertMaterial({ color: 0x2c2c2c }));
+  const trackMesh = new THREE.Mesh(geom, new THREE.MeshLambertMaterial({ color: 0x1a1a1a }));
   trackMesh.receiveShadow = true;
   scene.add(trackMesh);
 
-  // edges (rumble strips)
+  // gravel run-off apron
+  addApron(TRACK_WIDTH + 1.5, 5.5, 0x8a7a5a);
+  addApron(-TRACK_WIDTH - 1.5, 5.5, 0x8a7a5a);
+
+  // rumble strips
   addRumbleStrip(TRACK_WIDTH + 0.2, 1.2);
   addRumbleStrip(-TRACK_WIDTH - 0.2, 1.2);
 
-  // center dashed line
-  const dashGeo = new THREE.PlaneGeometry(0.6, 3);
-  const dashMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  for (let i = 0; i < 80; i++) {
-    const t = i / 80;
-    const p = trackCurve.getPoint(t);
-    const tan = trackCurve.getTangent(t);
-    const dash = new THREE.Mesh(dashGeo, dashMat);
-    dash.position.set(p.x, 0.04, p.z);
-    dash.rotation.x = -Math.PI / 2;
-    dash.rotation.z = -Math.atan2(tan.x, tan.z);
-    scene.add(dash);
-  }
+  // tire barriers at selected sharp corners
+  addTireBarriers();
 
   // finish line (checkered)
   const c = document.createElement('canvas');
@@ -202,6 +202,59 @@ function addRumbleStrip(offset, width) {
   geom.setIndex(indices);
   const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
   scene.add(new THREE.Mesh(geom, mat));
+}
+
+function addApron(offset, width, color) {
+  const segs = 400;
+  const positions = [];
+  const indices = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const p = trackCurve.getPoint(t);
+    const tan = trackCurve.getTangent(t).normalize();
+    const side = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+    const inner = p.clone().addScaledVector(side, offset);
+    const outer = p.clone().addScaledVector(side, offset + Math.sign(offset) * width);
+    positions.push(inner.x, 0.01, inner.z);
+    positions.push(outer.x, 0.01, outer.z);
+    if (i < segs) {
+      const a = i * 2, b = i * 2 + 1, cI = i * 2 + 2, d = i * 2 + 3;
+      indices.push(a, b, cI, b, d, cI);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setIndex(indices);
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+function addTireBarriers() {
+  // Place tire stacks at sharp corners (by curve parameter t)
+  const tStops = [0.08, 0.22, 0.35, 0.48, 0.58, 0.68, 0.78, 0.92];
+  const tireMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+  const tireGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.45, 12);
+  for (const t of tStops) {
+    const p = trackCurve.getPoint(t);
+    const tan = trackCurve.getTangent(t).normalize();
+    const side = new THREE.Vector3(-tan.z, 0, tan.x).normalize();
+    // both sides
+    for (const dir of [1, -1]) {
+      const base = p.clone().addScaledVector(side, dir * (TRACK_WIDTH + 8));
+      // stack of 4 tires horizontally, 2 high
+      for (let row = 0; row < 2; row++) {
+        for (let i = -2; i <= 2; i++) {
+          const pos = base.clone().addScaledVector(tan, i * 1.2);
+          const tire = new THREE.Mesh(tireGeo, tireMat);
+          tire.position.set(pos.x, 0.25 + row * 0.45, pos.z);
+          tire.castShadow = true;
+          scene.add(tire);
+        }
+      }
+    }
+  }
 }
 
 function addScenery() {
@@ -304,10 +357,12 @@ function spawnCars(numNPCs) {
       finishTime: 0,
       name: isPlayer ? 'You' : `CPU ${i + 1}`,
       color,
-      // NPC tuning: 0.78..0.96 skill band, keeps cars beatable but competitive
-      skill: isPlayer ? 1 : 0.78 + Math.random() * 0.18,
+      // Per-NPC skill variance (0..1). Actual speed scales with player speed.
+      skillRoll: Math.random(),
       lookahead: 10 + Math.random() * 4,
       jitter: Math.random() * Math.PI * 2,
+      refSpeed: 0,
+      onTrack: true,
     };
 
     if (isPlayer) player = car;
@@ -378,6 +433,12 @@ function updatePlayer(dt) {
   const dist = Math.hypot(player.position.x - nearP.x, player.position.z - nearP.z);
   const onTrack = dist < TRACK_WIDTH;
   const mult = onTrack ? 1 : 0.45;
+  player.onTrack = onTrack;
+
+  // Reference speed: upper envelope of recent player speed. NPCs scale off this.
+  const absSpd = Math.abs(player.speed);
+  if (absSpd > player.refSpeed) player.refSpeed = absSpd;
+  else player.refSpeed = Math.max(0, player.refSpeed - 5 * dt);
 
   player.position.x += Math.sin(player.heading) * player.speed * dt * mult;
   player.position.z += Math.cos(player.heading) * player.speed * dt * mult;
@@ -412,18 +473,43 @@ function updateNPC(npc, dt) {
   const tB = trackCurve.getTangent((currentT + 0.03) % 1).normalize();
   const turn = Math.acos(Math.max(-1, Math.min(1, tA.dot(tB))));
 
-  const BASE_MAX = 58 * npc.skill;
-  let targetSpeed = BASE_MAX;
+  const PLAYER_MAX = 58;
+  const ABSOLUTE_MAX = PLAYER_MAX * 1.08; // NPC ceiling slightly above player
+
+  // Dynamic reference: scale to player's recent top speed with floor.
+  let reference;
+  if (!player.onTrack) {
+    // Player is off-track — NPCs run at their own full pace
+    reference = PLAYER_MAX;
+  } else {
+    reference = Math.max(player.refSpeed, 30);
+  }
+
+  // Base skill: always slightly slower than player (0.92..0.98 of reference)
+  const baseSkill = 0.92 + npc.skillRoll * 0.06;
+
+  // Rubber-band based on race position (progress = lap + t)
+  const rankDiff = carRank(npc) - carRank(player);
+  let skillAdj = 0;
+  if (rankDiff > 0.15) skillAdj = -0.08;       // way ahead: ease off
+  else if (rankDiff > 0.05) skillAdj = -0.03;  // ahead: gentle ease
+  else if (rankDiff < -0.2) skillAdj = 0.10;   // way behind: catch up
+  else if (rankDiff < -0.05) skillAdj = 0.04;  // behind: mild boost
+  const effSkill = baseSkill + skillAdj;
+
+  let targetSpeed = reference * effSkill;
   if (turn > 0.12) targetSpeed *= 0.78;
   if (turn > 0.22) targetSpeed *= 0.7;
 
-  // small jitter to simulate imperfection
+  // small jitter for imperfection
   npc.jitter += dt * 0.8;
   targetSpeed *= 0.97 + 0.03 * Math.sin(npc.jitter);
 
-  if (npc.speed < targetSpeed) npc.speed += 24 * dt;
-  else npc.speed -= 28 * dt;
-  npc.speed = Math.max(0, Math.min(BASE_MAX, npc.speed));
+  targetSpeed = Math.min(targetSpeed, ABSOLUTE_MAX);
+
+  if (npc.speed < targetSpeed) npc.speed += 26 * dt;
+  else npc.speed -= 30 * dt;
+  npc.speed = Math.max(0, Math.min(ABSOLUTE_MAX, npc.speed));
 
   npc.position.x += Math.sin(npc.heading) * npc.speed * dt;
   npc.position.z += Math.cos(npc.heading) * npc.speed * dt;
