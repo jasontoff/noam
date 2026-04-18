@@ -1,0 +1,38 @@
+name: Deploy Cloud Run Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'fps-game/server.js'
+      - 'fps-game/package.json'
+      - 'fps-game/package-lock.json'
+      - 'fps-game/Dockerfile'
+      - 'fps-game/public/**'
+      - '.github/workflows/deploy-cloudrun.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy fps-game-server \
+            --source fps-game \
+            --region us-central1 \
+            --project gen-lang-client-0448267425 \
+            --allow-unauthenticated \
+            --session-affinity \
+            --max-instances=20 \
+            --timeout=3600 \
+            --quiet
