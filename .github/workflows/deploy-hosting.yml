@@ -53,7 +53,7 @@ jobs:
           <body><h1>noam.bot</h1>
           <div class="games">
             <a href="/fps-game/">Play FPS Arena</a>
-            <a href="/racing-game/">Play Racing</a>
+            <a href="/racing-game/">Play Overtake</a>
             <a href="/drawing-game/">Play Doodle Duel</a>
             <a href="/tower-defense-game/">Play Path of Ruin</a>
           </div></body></html>
