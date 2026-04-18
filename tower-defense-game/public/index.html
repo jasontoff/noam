@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Tower Defense</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #0b1020;
+    color: #e6ecff;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+  }
+  #canvas-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, #1a2242 0%, #0b1020 100%);
+    position: relative;
+  }
+  canvas {
+    background: #2a2f1a;
+    border: 2px solid #3b4676;
+    box-shadow: 0 0 40px rgba(80,120,255,0.2);
+    cursor: crosshair;
+  }
+  #sidebar {
+    width: 260px;
+    background: #111935;
+    border-left: 2px solid #3b4676;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  h1 {
+    font-size: 20px;
+    letter-spacing: 1px;
+    color: #9fb8ff;
+    text-align: center;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
+    background: #0b1020;
+    border: 1px solid #3b4676;
+    border-radius: 6px;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .stat .label {
+    font-size: 10px;
+    color: #7b88c0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .stat .value {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffe082;
+  }
+  .stat.hp .value { color: #ff6b6b; }
+  .stat.wave .value { color: #81c784; }
+  .stat.score .value { color: #9fb8ff; }
+
+  .section-title {
+    font-size: 11px;
+    color: #7b88c0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .tower-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    background: #1a2455;
+    border: 2px solid #3b4676;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+  }
+  .tower-btn:hover {
+    background: #24307a;
+    border-color: #6a7fd8;
+  }
+  .tower-btn.selected {
+    background: #2a3a95;
+    border-color: #ffe082;
+    box-shadow: 0 0 10px rgba(255, 224, 130, 0.4);
+  }
+  .tower-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .tower-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .tower-info {
+    flex: 1;
+  }
+  .tower-name {
+    font-size: 13px;
+    font-weight: bold;
+  }
+  .tower-cost {
+    font-size: 11px;
+    color: #ffe082;
+  }
+  .tower-desc {
+    font-size: 10px;
+    color: #9fb8ff;
+  }
+
+  #wave-btn {
+    padding: 12px;
+    background: #2e7d32;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #wave-btn:hover { background: #388e3c; }
+  #wave-btn:disabled { background: #555; cursor: not-allowed; }
+
+  #message {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: #ffe082;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 16px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #message.show { opacity: 1; }
+
+  #gameover {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.9);
+    padding: 30px;
+    border-radius: 10px;
+    border: 2px solid #ff6b6b;
+    text-align: center;
+    display: none;
+  }
+  #gameover h2 { font-size: 32px; color: #ff6b6b; margin-bottom: 10px; }
+  #gameover p { margin-bottom: 20px; }
+  #gameover button {
+    padding: 10px 20px;
+    background: #6a7fd8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .help {
+    font-size: 10px;
+    color: #7b88c0;
+    line-height: 1.4;
+    padding: 8px;
+    background: #0b1020;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-wrap">
+    <canvas id="game" width="900" height="640"></canvas>
+    <div id="message"></div>
+    <div id="gameover">
+      <h2>GAME OVER</h2>
+      <p id="gameover-text">The enemies overran your base!</p>
+      <button onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+  <div id="sidebar">
+    <h1>TOWER DEFENSE</h1>
+    <div class="stats">
+      <div class="stat hp"><div class="label">Lives</div><div class="value" id="lives">20</div></div>
+      <div class="stat"><div class="label">Gold</div><div class="value" id="gold">150</div></div>
+      <div class="stat wave"><div class="label">Wave</div><div class="value" id="wave">0</div></div>
+      <div class="stat score"><div class="label">Score</div><div class="value" id="score">0</div></div>
+    </div>
+
+    <div class="section-title">Towers</div>
+    <div id="tower-list"></div>
+
+    <button id="wave-btn">START WAVE</button>
+
+    <div class="section-title">Controls</div>
+    <div class="help">
+      Click a tower, then click the map to place it.<br>
+      Right-click a tower to sell (50% refund).<br>
+      Click an existing tower to see its range.<br>
+      Towers can't be placed on the path.
+    </div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
