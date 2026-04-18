@@ -1,0 +1,57 @@
+name: Deploy Firebase Hosting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'fps-game/public/**'
+      - 'fps-game/firebase.json'
+      - 'fps-game/.firebaserc'
+      - 'racing-game/public/**'
+      - '.github/workflows/deploy-hosting.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fps-game
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare hosting-public
+        run: |
+          mkdir -p hosting-public/fps-game
+          cp public/index.html hosting-public/fps-game/
+          cp public/game.js hosting-public/fps-game/
+          cp -r public/models hosting-public/fps-game/
+
+          mkdir -p hosting-public/racing-game
+          cp ../racing-game/public/index.html hosting-public/racing-game/
+          cp ../racing-game/public/game.js hosting-public/racing-game/
+
+          cat > hosting-public/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en"><head><meta charset="UTF-8"><title>noam.bot</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>body{background:#111;color:#0f0;font-family:'Courier New',monospace;display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100dvh;margin:0}
+          h1{font-size:3rem;text-shadow:0 0 20px #0f0;margin-bottom:1rem}
+          .games{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center}
+          a{color:#0f0;font-size:1.5rem;text-decoration:none;border:2px solid #0f0;padding:10px 20px;display:inline-block}
+          a:hover{background:#0f0;color:#111}</style></head>
+          <body><h1>noam.bot</h1>
+          <div class="games">
+            <a href="/fps-game/">Play FPS Arena</a>
+            <a href="/racing-game/">Play Racing</a>
+          </div></body></html>
+          EOF
+
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: gen-lang-client-0448267425
+          target: noam
+          channelId: live
+          entryPoint: fps-game
