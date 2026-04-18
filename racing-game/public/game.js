@@ -363,6 +363,10 @@ function spawnCars(numNPCs) {
       jitter: Math.random() * Math.PI * 2,
       refSpeed: 0,
       onTrack: true,
+      mistakeActive: false,
+      mistakeCooldown: 4 + Math.random() * 10,
+      mistakeRemaining: 0,
+      mistakeOffset: 0,
     };
 
     if (isPlayer) player = car;
@@ -454,9 +458,36 @@ function updateNPC(npc, dt) {
     return;
   }
 
+  // Mistake timer: occasional wide lines / off-track drifts
+  if (npc.mistakeActive) {
+    npc.mistakeRemaining -= dt;
+    if (npc.mistakeRemaining <= 0) {
+      npc.mistakeActive = false;
+      npc.mistakeCooldown = 6 + Math.random() * 18;  // 6..24s until next
+    }
+  } else {
+    npc.mistakeCooldown -= dt;
+    if (npc.mistakeCooldown <= 0) {
+      npc.mistakeActive = true;
+      npc.mistakeRemaining = 0.6 + Math.random() * 1.6;  // 0.6..2.2s
+      // Push aim off the racing line; sometimes fully off track
+      const severity = Math.random();
+      const magnitude = severity < 0.3
+        ? TRACK_WIDTH * 1.2 + Math.random() * 6   // full off-track
+        : TRACK_WIDTH * 0.6 * severity;           // wide line
+      npc.mistakeOffset = (Math.random() < 0.5 ? 1 : -1) * magnitude;
+    }
+  }
+
   const currentT = findClosestT(npc.position, npc.lastT);
   const lookT = (currentT + npc.lookahead / trackLength) % 1;
-  const target = trackCurve.getPoint(lookT);
+  let target = trackCurve.getPoint(lookT);
+
+  if (npc.mistakeActive) {
+    const ltan = trackCurve.getTangent(lookT).normalize();
+    const lside = new THREE.Vector3(-ltan.z, 0, ltan.x).normalize();
+    target = target.clone().addScaledVector(lside, npc.mistakeOffset);
+  }
 
   const dx = target.x - npc.position.x;
   const dz = target.z - npc.position.z;
@@ -474,45 +505,44 @@ function updateNPC(npc, dt) {
   const turn = Math.acos(Math.max(-1, Math.min(1, tA.dot(tB))));
 
   const PLAYER_MAX = 58;
-  const ABSOLUTE_MAX = PLAYER_MAX * 1.08; // NPC ceiling slightly above player
+  const NPC_MAX_ABS = PLAYER_MAX * 1.18;
+  // Intrinsic top speed: 1.00..1.12 of player max. Some NPCs are faster than you.
+  const baseMax = PLAYER_MAX * (1.00 + npc.skillRoll * 0.12);
 
-  // Dynamic reference: scale to player's recent top speed with floor.
-  let reference;
-  if (!player.onTrack) {
-    // Player is off-track — NPCs run at their own full pace
-    reference = PLAYER_MAX;
-  } else {
-    reference = Math.max(player.refSpeed, 30);
-  }
+  let targetSpeed = baseMax;
 
-  // Base skill: always slightly slower than player (0.92..0.98 of reference)
-  const baseSkill = 0.92 + npc.skillRoll * 0.06;
-
-  // Rubber-band based on race position (progress = lap + t)
+  // Rubber-band only to prevent runaway leads or unrecoverable gaps
   const rankDiff = carRank(npc) - carRank(player);
-  let skillAdj = 0;
-  if (rankDiff > 0.15) skillAdj = -0.08;       // way ahead: ease off
-  else if (rankDiff > 0.05) skillAdj = -0.03;  // ahead: gentle ease
-  else if (rankDiff < -0.2) skillAdj = 0.10;   // way behind: catch up
-  else if (rankDiff < -0.05) skillAdj = 0.04;  // behind: mild boost
-  const effSkill = baseSkill + skillAdj;
+  if (rankDiff > 0.20) targetSpeed *= 0.90;
+  else if (rankDiff > 0.08) targetSpeed *= 0.96;
+  else if (rankDiff < -0.25) targetSpeed *= 1.08;
+  else if (rankDiff < -0.10) targetSpeed *= 1.03;
 
-  let targetSpeed = reference * effSkill;
+  // If player is off-track, NPCs push harder
+  if (!player.onTrack) targetSpeed *= 1.05;
+
+  // During a mistake, NPC scrubs speed
+  if (npc.mistakeActive) targetSpeed *= 0.82;
+
   if (turn > 0.12) targetSpeed *= 0.78;
   if (turn > 0.22) targetSpeed *= 0.7;
 
-  // small jitter for imperfection
   npc.jitter += dt * 0.8;
   targetSpeed *= 0.97 + 0.03 * Math.sin(npc.jitter);
+  targetSpeed = Math.min(targetSpeed, NPC_MAX_ABS);
 
-  targetSpeed = Math.min(targetSpeed, ABSOLUTE_MAX);
+  if (npc.speed < targetSpeed) npc.speed += 28 * dt;
+  else npc.speed -= 32 * dt;
+  npc.speed = Math.max(0, Math.min(NPC_MAX_ABS, npc.speed));
 
-  if (npc.speed < targetSpeed) npc.speed += 26 * dt;
-  else npc.speed -= 30 * dt;
-  npc.speed = Math.max(0, Math.min(ABSOLUTE_MAX, npc.speed));
+  // Off-track slowdown (same as player)
+  const nearP = trackCurve.getPoint(currentT);
+  const distFromTrack = Math.hypot(npc.position.x - nearP.x, npc.position.z - nearP.z);
+  const onTrack = distFromTrack < TRACK_WIDTH;
+  const mult = onTrack ? 1 : 0.55;
 
-  npc.position.x += Math.sin(npc.heading) * npc.speed * dt;
-  npc.position.z += Math.cos(npc.heading) * npc.speed * dt;
+  npc.position.x += Math.sin(npc.heading) * npc.speed * dt * mult;
+  npc.position.z += Math.cos(npc.heading) * npc.speed * dt * mult;
 
   npc.mesh.position.copy(npc.position);
   npc.mesh.rotation.y = npc.heading;
