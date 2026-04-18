@@ -8,12 +8,33 @@ const socket = BACKEND_URL ? io(BACKEND_URL) : io();
 let me = { id: null, name: null };
 let gameState = 'waiting';
 let drawerId = null;
-let roundEndsAt = 0;
-let pausedAt = null;           // timestamp when server paused the timer, or null
-let isTyping = false;          // have we told the server we're currently typing?
+// Timer is driven by {msLeft, paused} from the server (clock-independent).
+// When not paused we set deadlineAt = Date.now() + msLeft on each update and
+// the display just counts down locally. When paused we hold pausedMsLeft.
+let deadlineAt = 0;
+let pausedMsLeft = null;
+let paused = false;
+let isTyping = false;
 let myGuessedThisRound = false;
 let isDrawer = () => drawerId === me.id;
 const TYPING_PAUSE_THRESHOLD_MS = 15 * 1000;
+
+function applyTimeInfo(data) {
+  if (!data) return;
+  paused = !!data.paused;
+  if (typeof data.msLeft !== 'number') return;
+  if (paused) {
+    pausedMsLeft = data.msLeft;
+  } else {
+    pausedMsLeft = null;
+  }
+  deadlineAt = Date.now() + data.msLeft;
+}
+
+function currentMsLeft() {
+  if (paused) return pausedMsLeft || 0;
+  return Math.max(0, deadlineAt - Date.now());
+}
 
 // === DOM ===
 const canvas = document.getElementById('canvas');
@@ -85,14 +106,14 @@ function clearCanvas() {
 clearCanvas();
 
 function startStroke(evt) {
-  if (!isDrawer() || gameState !== 'drawing' || pausedAt) return;
+  if (!isDrawer() || gameState !== 'drawing' || paused) return;
   evt.preventDefault();
   drawing = true;
   lastPos = canvasToNorm(evt);
 }
 function moveStroke(evt) {
   if (!drawing) return;
-  if (pausedAt) { endStroke(); return; }
+  if (paused) { endStroke(); return; }
   evt.preventDefault();
   const p = canvasToNorm(evt);
   const stroke = {
@@ -137,12 +158,12 @@ clearBtn.addEventListener('click', () => {
 });
 
 function updateToolbar() {
-  if (isDrawer() && gameState === 'drawing' && !pausedAt) {
+  if (isDrawer() && gameState === 'drawing' && !paused) {
     toolbar.classList.remove('disabled');
   } else {
     toolbar.classList.add('disabled');
   }
-  if (pausedAt && gameState === 'drawing') {
+  if (paused && gameState === 'drawing') {
     pauseBanner.classList.remove('hidden');
   } else {
     pauseBanner.classList.add('hidden');
@@ -166,7 +187,7 @@ function shouldBeTyping() {
   if (gameState !== 'drawing') return false;
   if (myGuessedThisRound) return false;
   if (!guessInput.value.trim()) return false;
-  const msLeft = roundEndsAt - (pausedAt || Date.now());
+  const msLeft = currentMsLeft();
   return msLeft > 0 && msLeft <= TYPING_PAUSE_THRESHOLD_MS;
 }
 function startTypingIfNeeded() {
@@ -190,8 +211,7 @@ socket.on('init', (data) => {
   me.id = data.id;
   drawerId = data.drawerId;
   gameState = data.state;
-  roundEndsAt = data.roundEndsAt || 0;
-  pausedAt = data.pausedAt || null;
+  applyTimeInfo(data);
   setDifficultyBadge(data.difficulty);
   clearCanvas();
   if (data.strokes) data.strokes.forEach(drawSegment);
@@ -203,7 +223,7 @@ socket.on('init', (data) => {
 socket.on('state', (s) => {
   gameState = s.state;
   drawerId = s.drawerId;
-  pausedAt = s.pausedAt || null;
+  applyTimeInfo(s);
   setDifficultyBadge(s.state === 'drawing' ? s.difficulty : null);
   // New round? reset local flags.
   if (s.state === 'choosing' || s.state === 'drawing') {
@@ -211,7 +231,6 @@ socket.on('state', (s) => {
     myGuessedThisRound = !!(mine && mine.guessed);
   }
   if (s.state !== 'drawing') { isTyping = false; }
-  roundEndsAt = s.roundEndsAt || 0;
   renderPlayers(s.players || []);
   if (s.wordMask) {
     wordDisplay.textContent = isDrawer() && window.__myWord ? window.__myWord : s.wordMask;
@@ -305,7 +324,8 @@ socket.on('youGuessed', (data) => {
 
 socket.on('roundEnd', (data) => {
   window.__myWord = null;
-  pausedAt = null;
+  paused = false;
+  pausedMsLeft = null;
   isTyping = false;
   myGuessedThisRound = false;
   setDifficultyBadge(null);
@@ -339,8 +359,8 @@ socket.on('roundEnd', (data) => {
 });
 
 socket.on('tick', (t) => {
-  roundEndsAt = t.roundEndsAt || roundEndsAt;
-  pausedAt = t.pausedAt || null;
+  applyTimeInfo(t);
+  if (typeof t.state === 'string') gameState = t.state;
   // If time dropped into the pause-threshold while we already had text
   // typed, fire typingStart now.
   if (shouldBeTyping()) startTypingIfNeeded();
@@ -400,13 +420,15 @@ function escapeHtml(s) {
   }[c]));
 }
 
-// Local timer tick — when paused, show the value at the moment the pause
-// began (frozen) with a ⏸ prefix.
+// Local timer tick — driven by {msLeft, paused} from the server so the
+// displayed time doesn't depend on the client's wall clock matching the
+// server's (clock skew used to produce huge bogus countdowns).
 setInterval(() => {
-  if (!roundEndsAt) { timerEl.textContent = '--'; return; }
-  const referenceTime = pausedAt || Date.now();
-  const left = Math.max(0, Math.round((roundEndsAt - referenceTime) / 1000));
-  if (pausedAt) {
+  if (!deadlineAt && !paused) { timerEl.textContent = '--'; timerEl.style.color = ''; return; }
+  const left = Math.round(currentMsLeft() / 1000);
+  // Sanity cap — anything over ~3 minutes means something's gone wrong.
+  if (left > 180) { timerEl.textContent = '--'; timerEl.style.color = ''; return; }
+  if (paused) {
     timerEl.textContent = `⏸ ${left}s`;
     timerEl.style.color = '#fde047';
   } else {

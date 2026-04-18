@@ -114,7 +114,21 @@ function publicPlayerList() {
   }));
 }
 
+// Timer info as ms-remaining so clients don't depend on their own clock
+// agreeing with the server's clock. { msLeft, paused }.
+function getTimeInfo() {
+  if (GAME.state === 'waiting' || !GAME.roundEndsAt) {
+    return { msLeft: 0, paused: false };
+  }
+  const ref = GAME.pausedAt || Date.now();
+  return {
+    msLeft: Math.max(0, GAME.roundEndsAt - ref),
+    paused: !!GAME.pausedAt,
+  };
+}
+
 function broadcastState(extra = {}) {
+  const t = getTimeInfo();
   io.emit('state', {
     state: GAME.state,
     drawerId: GAME.drawerId,
@@ -122,8 +136,8 @@ function broadcastState(extra = {}) {
     wordMask: GAME.word ? maskWord(GAME.word) : null,
     wordLength: GAME.word ? GAME.word.length : null,
     difficulty: GAME.difficulty,
-    roundEndsAt: GAME.roundEndsAt,
-    pausedAt: GAME.pausedAt,
+    msLeft: t.msLeft,
+    paused: t.paused,
     players: publicPlayerList(),
     roundNumber: GAME.roundNumber,
     ...extra,
@@ -199,7 +213,7 @@ function nextTurn() {
 
   io.emit('clearCanvas');
   // only the drawer sees the choices
-  io.to(GAME.drawerId).emit('chooseWord', { choices: GAME.wordChoices, endsAt: GAME.roundEndsAt });
+  io.to(GAME.drawerId).emit('chooseWord', { choices: GAME.wordChoices, msLeft: getTimeInfo().msLeft });
   broadcastState();
 
   // auto-pick if drawer doesn't choose in time (picks the easy option)
@@ -288,6 +302,7 @@ function distance(a, b) {
 }
 
 io.on('connection', (socket) => {
+  const t = getTimeInfo();
   socket.emit('init', {
     id: socket.id,
     state: GAME.state,
@@ -295,8 +310,8 @@ io.on('connection', (socket) => {
     drawerId: GAME.drawerId,
     wordMask: GAME.word ? maskWord(GAME.word) : null,
     difficulty: GAME.difficulty,
-    roundEndsAt: GAME.roundEndsAt,
-    pausedAt: GAME.pausedAt,
+    msLeft: t.msLeft,
+    paused: t.paused,
     strokes: GAME.strokes,
     roundNumber: GAME.roundNumber,
   });
@@ -473,10 +488,10 @@ setInterval(() => {
   if (!GAME.pausedAt && GAME.state === 'drawing' && GAME.typingGuessers.size > 0) {
     maybePause();
   }
+  const t = getTimeInfo();
   io.emit('tick', {
-    now: Date.now(),
-    roundEndsAt: GAME.roundEndsAt,
-    pausedAt: GAME.pausedAt,
+    msLeft: t.msLeft,
+    paused: t.paused,
     state: GAME.state,
   });
 }, 1000);
