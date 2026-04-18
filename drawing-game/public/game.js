@@ -35,6 +35,7 @@ const nameInput = document.getElementById('name-input');
 const joinBtn = document.getElementById('join-btn');
 const clearBtn = document.getElementById('clear-btn');
 const pauseBanner = document.getElementById('pause-banner');
+const difficultyBadge = document.getElementById('difficulty-badge');
 
 // === Login ===
 joinBtn.addEventListener('click', doJoin);
@@ -191,6 +192,7 @@ socket.on('init', (data) => {
   gameState = data.state;
   roundEndsAt = data.roundEndsAt || 0;
   pausedAt = data.pausedAt || null;
+  setDifficultyBadge(data.difficulty);
   clearCanvas();
   if (data.strokes) data.strokes.forEach(drawSegment);
   renderPlayers(data.players || []);
@@ -202,6 +204,7 @@ socket.on('state', (s) => {
   gameState = s.state;
   drawerId = s.drawerId;
   pausedAt = s.pausedAt || null;
+  setDifficultyBadge(s.state === 'drawing' ? s.difficulty : null);
   // New round? reset local flags.
   if (s.state === 'choosing' || s.state === 'drawing') {
     const mine = (s.players || []).find(p => p.id === me.id);
@@ -226,14 +229,20 @@ socket.on('chooseWord', (data) => {
   if (!isDrawer()) return;
   overlay.classList.remove('hidden');
   overlayTitle.textContent = "You're drawing! Pick a word:";
-  overlayText.textContent = 'Choose one of these to draw.';
+  overlayText.textContent = 'Harder words = more points.';
   choicesEl.innerHTML = '';
-  data.choices.forEach(word => {
+  data.choices.forEach(choice => {
+    // Back-compat: older servers sent raw strings.
+    const word = typeof choice === 'string' ? choice : choice.word;
+    const difficulty = typeof choice === 'string' ? 'medium' : choice.difficulty;
     const btn = document.createElement('button');
-    btn.className = 'choice-btn';
-    btn.textContent = word;
+    btn.className = `choice-btn difficulty-${difficulty}`;
+    btn.innerHTML = `
+      <div class="choice-label">${difficultyLabel(difficulty)}</div>
+      <div class="choice-word">${escapeHtml(word)}</div>
+    `;
     btn.addEventListener('click', () => {
-      socket.emit('chooseWord', word);
+      socket.emit('chooseWord', { word, difficulty });
       overlay.classList.add('hidden');
       choicesEl.innerHTML = '';
     });
@@ -241,11 +250,31 @@ socket.on('chooseWord', (data) => {
   });
 });
 
-socket.on('yourWord', (word) => {
+socket.on('yourWord', (data) => {
+  // Server sends {word, difficulty}.
+  const word = typeof data === 'string' ? data : data.word;
   window.__myWord = word;
   wordDisplay.textContent = word;
   overlay.classList.add('hidden');
 });
+
+function difficultyLabel(d) {
+  if (d === 'easy') return 'EASY · 1×';
+  if (d === 'medium') return 'MEDIUM · 1.3×';
+  if (d === 'hard') return 'HARD · 1.7×';
+  return '';
+}
+
+function setDifficultyBadge(difficulty) {
+  difficultyBadge.className = 'difficulty-badge';
+  if (!difficulty) {
+    difficultyBadge.classList.add('hidden');
+    difficultyBadge.textContent = '';
+    return;
+  }
+  difficultyBadge.classList.add(difficulty);
+  difficultyBadge.textContent = difficultyLabel(difficulty);
+}
 
 socket.on('stroke', drawSegment);
 socket.on('clearCanvas', clearCanvas);
@@ -279,8 +308,10 @@ socket.on('roundEnd', (data) => {
   pausedAt = null;
   isTyping = false;
   myGuessedThisRound = false;
+  setDifficultyBadge(null);
   overlay.classList.remove('hidden');
-  overlayTitle.textContent = `The word was: "${data.word}"`;
+  const diffTag = data.difficulty ? ` (${difficultyLabel(data.difficulty)})` : '';
+  overlayTitle.textContent = `The word was: "${data.word}"${diffTag}`;
   const reasonText = {
     time: 'Time ran out!',
     allGuessed: 'Everyone got it! 🎉',

@@ -12,74 +12,52 @@ const io = new Server(server, {
 app.use(express.static('public'));
 
 // Word list — silly, fun, safe. Aimed at 5th-grade boys but fun for everyone.
-// Tiers roughly sorted by difficulty, but the drawer picks from a mixed trio.
-const WORDS = [
-  // easy / classic
-  'pizza', 'taco', 'burger', 'donut', 'banana', 'hot dog', 'waffle', 'cupcake',
-  'dog', 'cat', 'shark', 'snake', 'monkey', 'elephant', 'penguin', 'tiger',
-  'car', 'truck', 'rocket', 'airplane', 'submarine', 'skateboard', 'bike',
-  'sun', 'moon', 'rainbow', 'tornado', 'volcano', 'lightning', 'snowman',
-  'tree', 'cactus', 'mountain', 'beach', 'cloud', 'fire',
+// Each round, the drawer picks from one easy, one medium, and one hard word.
+// Harder picks earn more points (see DIFFICULTY_MULTIPLIER).
+const WORDS = {
+  easy: [
+    // simple shapes, short words, easy to draw in 10 seconds
+    'apple', 'hat', 'cat', 'dog', 'sun', 'moon', 'star', 'fork', 'spoon', 'cup',
+    'ball', 'fish', 'tree', 'house', 'car', 'book', 'eye', 'heart', 'cloud',
+    'egg', 'flag', 'key', 'pen', 'bed', 'chair', 'door', 'leaf', 'pizza',
+    'donut', 'cookie', 'cake', 'kite', 'boat', 'banana', 'fire', 'web',
+    'bee', 'frog', 'pig', 'cow', 'bird', 'owl', 'fox', 'bear', 'bat', 'ant',
+    'sock', 'shoe', 'ring', 'bag', 'box', 'coin', 'map', 'tent', 'snake',
+    'hot dog', 'snowman', 'rainbow', 'smiley face', 'worm',
+  ],
+  medium: [
+    // recognizable creatures/objects that take some thought to draw
+    'dolphin', 'elephant', 'penguin', 'giraffe', 'octopus', 'shark', 'butterfly',
+    'dragon', 'skateboard', 'bicycle', 'guitar', 'rocket', 'submarine', 'castle',
+    'volcano', 'tornado', 'ninja', 'pirate', 'vampire', 'zombie',
+    'lightsaber', 'water balloon', 'pizza slice', 'hamburger', 'taco', 'popcorn',
+    'cactus', 'lighthouse', 'backpack', 'rubber chicken', 'whoopee cushion',
+    'stinky sock', 'basketball hoop', 'fidget spinner', 'pretzel', 'sandwich',
+    'pineapple', 'strawberry', 'watermelon', 'airplane', 'helicopter',
+    'fire truck', 'sloth', 'flamingo', 'raccoon', 't-rex', 'creeper',
+    'mario mustache', 'ice cream cone', 'wizard', 'knight', 'robot', 'alien',
+    'ufo', 'trampoline', 'treehouse', 'disco ball', 'lava lamp',
+    'pufferfish', 'hedgehog', 'mummy', 'skeleton',
+  ],
+  hard: [
+    // tricky to draw, tricky to guess — and funny compound scenes for bonus chaos
+    'yacht', 'chandelier', 'xylophone', 'telescope', 'kaleidoscope', 'periscope',
+    'chameleon', 'narwhal', 'platypus', 'capybara', 'pterodactyl',
+    'accordion', 'armadillo', 'anteater', 'hippopotamus', 'rhinoceros', 'tuxedo',
+    'saxophone', 'unicycle', 'stethoscope', 'boombox', 'axolotl',
+    'dinosaur eating pizza', 'octopus wearing a top hat', 'bigfoot taking a selfie',
+    'dragon with a birthday cake', 'robot dog', 'cat in boots',
+    'trex tying shoes', 'wizard playing video games', 'loch ness monster',
+    'mount rushmore', 'eiffel tower', 'haunted house', 'statue of liberty',
+    'astronaut eating spaghetti', 'ninja eating a taco', 'penguin surfing',
+    'chicken on a motorcycle', 'alien at school', 'bigfoot on a skateboard',
+    'shark wearing sunglasses', 'monkey driving a car',
+    'cow jumping over the moon', 'dog on a skateboard', 'tornado of cats',
+    'slipping on a banana peel', 'gumball machine', 'treasure map',
+  ],
+};
 
-  // silly animals & creatures
-  'sloth', 'platypus', 'narwhal', 'capybara', 'llama', 'pufferfish',
-  'chameleon', 'axolotl', 'hedgehog', 'flamingo', 'octopus', 'crab',
-  'bigfoot', 'yeti', 'loch ness monster', 'dragon', 'unicorn',
-  'werewolf', 'zombie', 'mummy', 'skeleton', 'vampire', 'alien', 'ufo',
-  't-rex', 'raptor', 'triceratops',
-
-  // heroes, ninjas, cool stuff
-  'ninja', 'pirate', 'wizard', 'knight', 'robot', 'cyborg', 'astronaut',
-  'superhero', 'supervillain', 'secret agent', 'spy', 'detective',
-  'lightsaber', 'magic wand', 'treasure chest', 'pirate ship',
-
-  // sports & playground
-  'dodgeball', 'basketball', 'soccer ball', 'trampoline', 'slip n slide',
-  'water balloon', 'paintball', 'nerf gun', 'bouncy castle',
-  'tetherball', 'four square', 'tag',
-
-  // school stuff
-  'cafeteria tray', 'chalkboard', 'lunchbox', 'homework', 'pop quiz',
-  'school bus', 'backpack', 'recess', 'field trip',
-
-  // video games / memes they know
-  'minecraft creeper', 'pac-man', 'mario mustache', 'pokeball',
-  'among us crewmate', 'fortnite dance', 'controller',
-
-  // mildly gross — the good kind of funny
-  'stinky sock', 'sweaty gym shirt', 'rubber chicken', 'whoopee cushion',
-  'fart cloud', 'burp bubble', 'slime', 'mystery meat', 'moldy sandwich',
-  'booger', 'armpit fart', 'dog drool', 'wet willie',
-  'stepping in gum', 'slipping on a banana peel', 'brain freeze',
-
-  // funny scenarios (great ones)
-  'cat in sunglasses', 'shark wearing a top hat', 'dog on a skateboard',
-  'dinosaur eating pizza', 'alien at school', 'robot dancing',
-  'monkey driving a car', 'chicken on a motorcycle', 'cow jumping over the moon',
-  'dragon with a birthday cake', 'penguin surfing', 'octopus juggling',
-  'ninja eating a taco', 'bigfoot taking a selfie', 'trex tying shoes',
-  'wizard playing video games', 'astronaut eating spaghetti',
-
-  // actions / moves
-  'dabbing', 'backflip', 'cannonball', 'belly flop', 'high five',
-  'moonwalk', 'breakdance', 'slam dunk', 'home run', 'touchdown',
-
-  // food fun
-  'pizza slice', 'ice cream sundae', 'giant taco', 'cereal bowl',
-  'hot sauce', 'gumball machine', 'popcorn', 'cotton candy',
-
-  // random fun objects
-  'fidget spinner', 'lava lamp', 'disco ball', 'boombox', 'yo-yo',
-  'slingshot', 'magnifying glass', 'remote control', 'treasure map',
-  'crystal ball', 'spy camera', 'pogo stick',
-
-  // landmarks / places
-  'pyramid', 'eiffel tower', 'statue of liberty', 'mount rushmore',
-  'haunted house', 'treehouse', 'castle', 'secret lair',
-
-  // weather / nature goofy
-  'tornado of cats', 'pizza rain', 'snowball fight',
-];
+const DIFFICULTY_MULTIPLIER = { easy: 1, medium: 1.3, hard: 1.7 };
 
 const ROUND_TIME = 75;        // seconds to draw
 const WORD_CHOICE_TIME = 12;  // seconds to pick
@@ -96,7 +74,8 @@ const GAME = {
   turnIndex: 0,
   drawerId: null,
   word: null,
-  wordChoices: [],
+  difficulty: null,     // 'easy' | 'medium' | 'hard' while drawing
+  wordChoices: [],      // [{word, difficulty}, ...]
   state: 'waiting',     // 'waiting' | 'choosing' | 'drawing' | 'roundEnd'
   roundEndsAt: 0,
   strokes: [],          // for late joiners this round
@@ -114,14 +93,12 @@ const COLORS = [
 let colorIdx = 0;
 
 function pickThreeWords() {
-  const pool = [...WORDS];
-  const picks = [];
-  for (let i = 0; i < 3 && pool.length; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picks.push(pool[idx]);
-    pool.splice(idx, 1);
-  }
-  return picks;
+  // One easy, one medium, one hard.
+  return ['easy', 'medium', 'hard'].map(difficulty => {
+    const pool = WORDS[difficulty];
+    const word = pool[Math.floor(Math.random() * pool.length)];
+    return { word, difficulty };
+  });
 }
 
 function maskWord(word) {
@@ -144,6 +121,7 @@ function broadcastState(extra = {}) {
     drawerName: GAME.players[GAME.drawerId]?.name || null,
     wordMask: GAME.word ? maskWord(GAME.word) : null,
     wordLength: GAME.word ? GAME.word.length : null,
+    difficulty: GAME.difficulty,
     roundEndsAt: GAME.roundEndsAt,
     pausedAt: GAME.pausedAt,
     players: publicPlayerList(),
@@ -188,6 +166,7 @@ function nextTurn() {
   // reset per-round state
   GAME.strokes = [];
   GAME.word = null;
+  GAME.difficulty = null;
   GAME.wordChoices = [];
   GAME.roundScores = {};
   GAME.typingGuessers.clear();
@@ -223,20 +202,22 @@ function nextTurn() {
   io.to(GAME.drawerId).emit('chooseWord', { choices: GAME.wordChoices, endsAt: GAME.roundEndsAt });
   broadcastState();
 
-  // auto-pick if drawer doesn't choose in time
+  // auto-pick if drawer doesn't choose in time (picks the easy option)
   setTimeout(() => {
     if (GAME.state === 'choosing' && GAME.drawerId && !GAME.word) {
-      startRound(GAME.wordChoices[0]);
+      const def = GAME.wordChoices[0];
+      startRound(def.word, def.difficulty);
     }
   }, WORD_CHOICE_TIME * 1000 + 200);
 }
 
-function startRound(word) {
+function startRound(word, difficulty) {
   GAME.word = word;
+  GAME.difficulty = difficulty;
   GAME.state = 'drawing';
   GAME.roundEndsAt = Date.now() + ROUND_TIME * 1000;
   // only the drawer knows the real word
-  io.to(GAME.drawerId).emit('yourWord', word);
+  io.to(GAME.drawerId).emit('yourWord', { word, difficulty });
   broadcastState();
   scheduleRoundEnd();
 }
@@ -271,6 +252,7 @@ function endRound(reason) {
 
   io.emit('roundEnd', {
     word: revealed,
+    difficulty: GAME.difficulty,
     reason,
     roundScores: scoresThisRound,
     totals: publicPlayerList().map(p => ({ id: p.id, name: p.name, score: p.score })),
@@ -312,6 +294,7 @@ io.on('connection', (socket) => {
     players: publicPlayerList(),
     drawerId: GAME.drawerId,
     wordMask: GAME.word ? maskWord(GAME.word) : null,
+    difficulty: GAME.difficulty,
     roundEndsAt: GAME.roundEndsAt,
     pausedAt: GAME.pausedAt,
     strokes: GAME.strokes,
@@ -337,10 +320,14 @@ io.on('connection', (socket) => {
     startGameIfReady();
   });
 
-  socket.on('chooseWord', (word) => {
+  socket.on('chooseWord', (choice) => {
     if (socket.id !== GAME.drawerId || GAME.state !== 'choosing') return;
-    if (!GAME.wordChoices.includes(word)) return;
-    startRound(word);
+    // Accept either the raw word string (legacy) or {word, difficulty}.
+    const picked = typeof choice === 'string'
+      ? GAME.wordChoices.find(c => c.word === choice)
+      : GAME.wordChoices.find(c => c.word === choice?.word);
+    if (!picked) return;
+    startRound(picked.word, picked.difficulty);
   });
 
   socket.on('stroke', (s) => {
@@ -411,18 +398,20 @@ io.on('connection', (socket) => {
       const guess = normalize(text);
       const answer = normalize(GAME.word);
       if (guess === answer) {
-        // score: time-based for guesser, +50 per guesser for drawer
+        // score: time-based for guesser, +50 per guesser for drawer, scaled by difficulty
+        const multiplier = DIFFICULTY_MULTIPLIER[GAME.difficulty] || 1;
         const msLeft = Math.max(0, GAME.roundEndsAt - Date.now());
         const fraction = msLeft / (ROUND_TIME * 1000); // 0..1
-        const points = Math.round(60 + fraction * 90); // 60..150
+        const points = Math.round((60 + fraction * 90) * multiplier);
         player.score += points;
         player.guessedThisRound = true;
         GAME.roundScores[socket.id] = (GAME.roundScores[socket.id] || 0) + points;
 
         const drawer = GAME.players[GAME.drawerId];
         if (drawer) {
-          drawer.score += 50;
-          GAME.roundScores[drawer.id] = (GAME.roundScores[drawer.id] || 0) + 50;
+          const drawerPts = Math.round(50 * multiplier);
+          drawer.score += drawerPts;
+          GAME.roundScores[drawer.id] = (GAME.roundScores[drawer.id] || 0) + drawerPts;
         }
 
         io.emit('chat', {

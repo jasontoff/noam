@@ -19,6 +19,20 @@
     .round-info { font-size: 14px; display: flex; gap: 16px; align-items: center; }
     .timer { font-weight: bold; background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 6px; min-width: 46px; text-align: center; }
     .word-display { font-family: monospace; font-size: 22px; letter-spacing: 6px; background: rgba(0,0,0,0.25); padding: 4px 12px; border-radius: 6px; }
+    .difficulty-badge { font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.5px; }
+    .difficulty-badge.hidden { display: none; }
+    .difficulty-badge.easy { background: #22c55e; color: #052e16; }
+    .difficulty-badge.medium { background: #f97316; color: #431407; }
+    .difficulty-badge.hard { background: #ef4444; color: #450a0a; }
+
+    .choice-btn.difficulty-easy { background: #22c55e; }
+    .choice-btn.difficulty-easy:hover { background: #4ade80; }
+    .choice-btn.difficulty-medium { background: #f97316; }
+    .choice-btn.difficulty-medium:hover { background: #fb923c; }
+    .choice-btn.difficulty-hard { background: #ef4444; }
+    .choice-btn.difficulty-hard:hover { background: #f87171; }
+    .choice-btn .choice-label { font-size: 10px; letter-spacing: 1px; opacity: 0.9; margin-bottom: 4px; }
+    .choice-btn .choice-word { font-size: 18px; }
 
     main { flex: 1; display: grid; grid-template-columns: 220px 1fr 280px; gap: 10px; padding: 10px; min-height: 0; }
     aside, section { background: #1e293b; border-radius: 10px; padding: 12px; min-height: 0; display: flex; flex-direction: column; }
@@ -107,6 +121,7 @@
     <h1>🎨 Doodle Duel</h1>
     <div class="round-info">
       <div id="round-label">Waiting…</div>
+      <div id="difficulty-badge" class="difficulty-badge hidden"></div>
       <div id="word-display" class="word-display">_ _ _</div>
       <div id="timer" class="timer">--</div>
     </div>
