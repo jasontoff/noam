@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crypts &amp; Loot</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100%;
+    background: #0b0d16;
+    color: #e7ecff;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  body {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px;
+  }
+  #app {
+    width: 100%;
+    max-width: 960px;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+  }
+  .panel {
+    background: #141a2e;
+    border: 2px solid #2b3660;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 0 24px rgba(60,100,255,0.1);
+  }
+  h1 {
+    font-size: 22px;
+    color: #9fb8ff;
+    letter-spacing: 2px;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-size: 15px;
+    color: #9fb8ff;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #2b3660;
+    padding-bottom: 4px;
+  }
+  .row { display: flex; gap: 12px; align-items: center; }
+  .fill { flex: 1; }
+  .muted { color: #8a9bc7; font-size: 12px; }
+  button {
+    background: #2b3660;
+    color: #e7ecff;
+    border: 1px solid #44528a;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s, transform 0.05s;
+  }
+  button:hover:not(:disabled) { background: #3b4a82; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary { background: #4a6cff; border-color: #6b89ff; }
+  button.primary:hover:not(:disabled) { background: #5c7eff; }
+  button.danger { background: #b6394a; border-color: #d96272; }
+  button.danger:hover:not(:disabled) { background: #c74a5b; }
+  button.ghost { background: transparent; border-color: #44528a; }
+
+  .stage {
+    min-height: 360px;
+    background: linear-gradient(180deg, #101529 0%, #070a16 100%);
+    border: 2px solid #2b3660;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .battlers {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    gap: 12px;
+  }
+  .battler {
+    flex: 1;
+    text-align: center;
+    padding: 16px;
+    border-radius: 8px;
+    background: rgba(30,40,80,0.4);
+    border: 1px solid #2b3660;
+    position: relative;
+    transition: transform 0.15s;
+  }
+  .battler.shake { animation: shake 0.2s; }
+  .battler.flash { animation: flash 0.3s; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-8px); }
+    75% { transform: translateX(8px); }
+  }
+  @keyframes flash {
+    0%, 100% { background: rgba(30,40,80,0.4); }
+    50% { background: rgba(255,80,80,0.4); }
+  }
+  .sprite {
+    font-size: 64px;
+    line-height: 1;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+  }
+  .battler-name { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+  .battler-sub { font-size: 12px; color: #8a9bc7; margin-bottom: 8px; }
+  .bar {
+    height: 12px;
+    background: #0b0d16;
+    border: 1px solid #2b3660;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .bar-fill { height: 100%; transition: width 0.3s; }
+  .bar-fill.hp { background: linear-gradient(90deg, #d94040, #f06060); }
+  .bar-fill.xp { background: linear-gradient(90deg, #4acfff, #8ef0ff); }
+  .bar-label { font-size: 11px; color: #c7d0e8; }
+
+  #log {
+    height: 140px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    background: #0b0d16;
+    border: 1px solid #2b3660;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  #log .line { margin-bottom: 2px; }
+  #log .dim { color: #8a9bc7; }
+  #log .hit { color: #ffb877; }
+  #log .crit { color: #ff6b6b; font-weight: bold; }
+  #log .loot { color: #8ef0ff; }
+  #log .xp { color: #a6ff9f; }
+  #log .lvl { color: #ffe066; font-weight: bold; }
+  #log .miss { color: #8a9bc7; font-style: italic; }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .gear-slots {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .slot {
+    background: #0b0d16;
+    border: 1px solid #2b3660;
+    border-radius: 6px;
+    padding: 6px;
+    text-align: center;
+    font-size: 12px;
+  }
+  .slot .slot-label { color: #8a9bc7; font-size: 10px; text-transform: uppercase; }
+  .slot .slot-item { color: #e7ecff; margin-top: 2px; min-height: 16px; }
+
+  #inventory {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0b0d16;
+    border: 1px solid #2b3660;
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .item-info { flex: 1; }
+  .item-name { font-weight: bold; }
+  .item-name.common { color: #e7ecff; }
+  .item-name.uncommon { color: #5cffa0; }
+  .item-name.rare { color: #5ca8ff; }
+  .item-name.epic { color: #c072ff; }
+  .item-name.legendary { color: #ffc14a; }
+  .item-stats { color: #8a9bc7; font-size: 11px; }
+  .item button {
+    padding: 3px 8px;
+    font-size: 11px;
+    margin-left: 4px;
+  }
+
+  .stat-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 2px 0;
+  }
+  .stat-line .label { color: #8a9bc7; }
+  .stat-line .value { color: #e7ecff; font-weight: bold; }
+
+  .zone-picker { display: flex; flex-direction: column; gap: 6px; }
+  .zone-btn {
+    text-align: left;
+    padding: 10px;
+    font-size: 13px;
+  }
+  .zone-btn .zone-name { font-weight: bold; display: block; margin-bottom: 2px; }
+  .zone-btn .zone-sub { color: #8a9bc7; font-size: 11px; }
+  .zone-btn:disabled .zone-name { color: #5a6a90; }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .overlay .panel { max-width: 420px; text-align: center; }
+  .overlay h2 { border: none; color: #ffe066; font-size: 22px; }
+  .overlay .emoji { font-size: 48px; margin-bottom: 12px; }
+
+  @media (max-width: 720px) {
+    #app { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div>
+      <div class="panel">
+        <h1>⚔ CRYPTS &amp; LOOT ⚔</h1>
+        <div class="stage" id="stage">
+          <div id="zone-header" class="muted" style="text-align:center; margin-bottom:8px;"></div>
+          <div class="battlers">
+            <div class="battler" id="player-battler">
+              <div class="sprite">🧙</div>
+              <div class="battler-name" id="player-name">Hero</div>
+              <div class="battler-sub" id="player-sub">Lv 1</div>
+              <div class="bar"><div class="bar-fill hp" id="player-hp-bar" style="width:100%"></div></div>
+              <div class="bar-label" id="player-hp-label">HP 20/20</div>
+              <div class="bar" style="margin-top:4px;"><div class="bar-fill xp" id="player-xp-bar" style="width:0%"></div></div>
+              <div class="bar-label" id="player-xp-label">XP 0/10</div>
+            </div>
+            <div class="battler" id="enemy-battler" style="visibility:hidden;">
+              <div class="sprite" id="enemy-sprite">👹</div>
+              <div class="battler-name" id="enemy-name">Goblin</div>
+              <div class="battler-sub" id="enemy-sub">Lv 1</div>
+              <div class="bar"><div class="bar-fill hp" id="enemy-hp-bar" style="width:100%"></div></div>
+              <div class="bar-label" id="enemy-hp-label">HP 10/10</div>
+            </div>
+          </div>
+        </div>
+        <h2>Combat Log</h2>
+        <div id="log"></div>
+        <div class="actions">
+          <button class="primary" id="btn-attack">⚔ Attack</button>
+          <button id="btn-defend">🛡 Defend</button>
+          <button id="btn-heal">❤ Potion</button>
+          <button class="danger" id="btn-flee">🏃 Flee</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Character</h2>
+        <div class="stat-line"><span class="label">Level</span><span class="value" id="s-level">1</span></div>
+        <div class="stat-line"><span class="label">HP</span><span class="value" id="s-hp">20 / 20</span></div>
+        <div class="stat-line"><span class="label">Attack</span><span class="value" id="s-atk">5</span></div>
+        <div class="stat-line"><span class="label">Defense</span><span class="value" id="s-def">2</span></div>
+        <div class="stat-line"><span class="label">Crit</span><span class="value" id="s-crit">5%</span></div>
+        <div class="stat-line"><span class="label">Gold</span><span class="value" id="s-gold">0</span></div>
+        <div class="stat-line"><span class="label">Potions</span><span class="value" id="s-pots">3</span></div>
+      </div>
+
+      <div class="panel" style="margin-top:12px;">
+        <h2>Equipped</h2>
+        <div class="gear-slots">
+          <div class="slot">
+            <div class="slot-label">Weapon</div>
+            <div class="slot-item" id="slot-weapon">—</div>
+          </div>
+          <div class="slot">
+            <div class="slot-label">Armor</div>
+            <div class="slot-item" id="slot-armor">—</div>
+          </div>
+          <div class="slot">
+            <div class="slot-label">Trinket</div>
+            <div class="slot-item" id="slot-trinket">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:12px;">
+        <h2>Zones</h2>
+        <div class="zone-picker" id="zones"></div>
+      </div>
+
+      <div class="panel" style="margin-top:12px;">
+        <h2>Inventory</h2>
+        <div id="inventory"><div class="muted">Empty</div></div>
+        <button class="ghost" id="btn-shop" style="width:100%; margin-top:8px;">🧪 Buy Potion (15g)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay" style="display:none;">
+    <div class="panel">
+      <div class="emoji" id="overlay-emoji">💀</div>
+      <h2 id="overlay-title">You Died</h2>
+      <p id="overlay-body" style="margin: 10px 0 16px; color:#c7d0e8;"></p>
+      <button class="primary" id="overlay-btn">Continue</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
