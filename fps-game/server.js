@@ -28,7 +28,7 @@ const WEAPONS = {
   pistol: {
     name: 'Pistol',
     damage: 20,
-    fireRate: 200,      // ms between shots
+    fireRate: 500,      // ms between shots
     bulletSpeed: 80,
     bulletLifetime: 2000,
     spread: 0,
@@ -128,10 +128,10 @@ const ABILITIES = {
 // Map obstacles (boxes) - {x, y, z, w, h, d}  y = center height
 const obstacles = [
   // Outer walls (tall)
-  { x: 0, y: 3, z: -25, w: 50, h: 6, d: 1 },
-  { x: 0, y: 3, z: 25, w: 50, h: 6, d: 1 },
-  { x: -25, y: 3, z: 0, w: 1, h: 6, d: 50 },
-  { x: 25, y: 3, z: 0, w: 1, h: 6, d: 50 },
+  { x: 0, y: 3, z: -50, w: 100, h: 6, d: 1 },
+  { x: 0, y: 3, z: 50, w: 100, h: 6, d: 1 },
+  { x: -50, y: 3, z: 0, w: 1, h: 6, d: 100 },
+  { x: 50, y: 3, z: 0, w: 1, h: 6, d: 100 },
 
   // === CENTER TOWER (multi-level) ===
   { x: 0, y: 1, z: 0, w: 5, h: 2, d: 5 },        // base platform (jumpable)
@@ -203,12 +203,16 @@ const obstacles = [
 ];
 
 const spawnPoints = [
-  { x: -20, z: -20 },
-  { x: 20, z: -20 },
-  { x: -20, z: 20 },
-  { x: 20, z: 20 },
-  { x: 0, z: -20 },
-  { x: 0, z: 20 },
+  { x: -40, z: -40 },
+  { x: 40, z: -40 },
+  { x: -40, z: 40 },
+  { x: 40, z: 40 },
+  { x: 0, z: -40 },
+  { x: 0, z: 40 },
+  { x: -40, z: 0 },
+  { x: 40, z: 0 },
+  { x: -25, z: -25 },
+  { x: 25, z: 25 },
 ];
 
 function getSpawnPoint() {
