@@ -86,6 +86,7 @@ const player = {
   currentZone: 'forest',
 };
 
+let shopStock = [];
 let enemy = null;
 let inBattle = false;
 let gameBusy = false;
@@ -185,6 +186,7 @@ function generateItem(enemyLvl) {
 
 function itemPower(it) { return (it.atk||0) + (it.def||0)*1.2 + (it.crit||0)*40; }
 function sellValue(it) { return Math.max(1, Math.round(itemPower(it) * 3 * RARITY_MULT[it.rarity])); }
+function buyPrice(it)  { return Math.max(5, Math.round(sellValue(it) * 3.2)); }
 function describeItem(it) {
   const parts = [];
   if (it.atk) parts.push(`+${it.atk} ATK`);
@@ -286,12 +288,41 @@ function renderZones() {
   });
 }
 
+function renderShop() {
+  const el = $('shop');
+  el.innerHTML = '';
+  if (shopStock.length === 0) {
+    el.innerHTML = '<div class="muted">Stock sold out — click Refresh.</div>';
+  } else {
+    shopStock.forEach((it, idx) => {
+      const price = buyPrice(it);
+      const canAfford = player.gold >= price;
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = `
+        <div class="item-info">
+          <div class="item-name ${RARITY_COLORS[it.rarity]}">${it.name}</div>
+          <div class="item-stats">${it.slot} · ${describeItem(it)}</div>
+        </div>
+        <button data-idx="${idx}" ${canAfford ? '' : 'disabled'}>Buy ${price}g</button>
+      `;
+      el.appendChild(row);
+    });
+    el.querySelectorAll('button').forEach(b => {
+      b.onclick = () => buyShopItem(+b.dataset.idx);
+    });
+  }
+  $('btn-buy-potion').disabled = player.gold < 15;
+  $('btn-refresh-shop').disabled = player.gold < 10;
+}
+
 function renderAll() {
   renderStats();
   renderEnemy();
   renderGear();
   renderInventory();
   renderZones();
+  renderShop();
 }
 
 // --- Actions ---
@@ -419,9 +450,11 @@ function enemyAttack() {
 function gainXp(amount) {
   player.xp += amount;
   log(`+${amount} XP`, 'xp');
+  let leveled = false;
   while (player.xp >= xpForLevel(player.level)) {
     player.xp -= xpForLevel(player.level);
     player.level++;
+    leveled = true;
     const hpGain = 4 + rand(1, 3);
     player.maxHp += hpGain;
     player.hp = player.maxHp;
@@ -429,6 +462,7 @@ function gainXp(amount) {
     player.baseDef += (player.level % 2 === 0 ? 1 : 0);
     log(`LEVEL UP! You are now level ${player.level}. (+${hpGain} HP, fully healed)`, 'lvl');
   }
+  if (leveled) generateShopStock();
 }
 
 function addItem(item) {
@@ -468,6 +502,36 @@ function buyPotion() {
   player.gold -= 15;
   player.potions++;
   log('Bought a potion.', 'loot');
+  renderAll();
+}
+
+function generateShopStock() {
+  // 4 items tuned to player level, skewed a bit to common/uncommon
+  shopStock = [];
+  for (let i = 0; i < 4; i++) {
+    const lvl = Math.max(1, player.level + rand(-1, 1));
+    const it = generateItem(lvl);
+    shopStock.push(it);
+  }
+}
+
+function refreshShop() {
+  if (player.gold < 10) { log('Not enough gold to refresh the shop.', 'dim'); return; }
+  player.gold -= 10;
+  generateShopStock();
+  log('Shop stock refreshed.', 'dim');
+  renderAll();
+}
+
+function buyShopItem(idx) {
+  const it = shopStock[idx];
+  if (!it) return;
+  const price = buyPrice(it);
+  if (player.gold < price) { log(`Not enough gold (need ${price}g).`, 'dim'); return; }
+  player.gold -= price;
+  shopStock.splice(idx, 1);
+  log(`Bought ${it.name} for ${price}g.`, 'loot');
+  addItem(it);
   renderAll();
 }
 
@@ -516,7 +580,8 @@ $('btn-attack').addEventListener('click', () => {
 $('btn-defend').addEventListener('click', playerDefend);
 $('btn-heal').addEventListener('click', playerHeal);
 $('btn-flee').addEventListener('click', playerFlee);
-$('btn-shop').addEventListener('click', buyPotion);
+$('btn-buy-potion').addEventListener('click', buyPotion);
+$('btn-refresh-shop').addEventListener('click', refreshShop);
 $('overlay-btn').addEventListener('click', () => {
   hideOverlay();
   endBattle();
@@ -527,5 +592,6 @@ $('zone-header').textContent = `Exploring: ${ZONES[0].name}`;
 $('btn-attack').textContent = '⚔ Find Enemy';
 log('Welcome, Hero. The Whispering Forest awaits...', 'dim');
 log('Click ⚔ Find Enemy to start a fight.', 'dim');
+generateShopStock();
 renderAll();
 setButtonsForBattle(false);
