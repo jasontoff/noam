@@ -296,7 +296,8 @@ function renderAll() {
 
 // --- Actions ---
 function setButtonsForBattle(on) {
-  $('btn-attack').disabled = !on || gameBusy;
+  // Attack button doubles as "Find Enemy" out of combat, so it's enabled unless busy.
+  $('btn-attack').disabled = gameBusy;
   $('btn-defend').disabled = !on || gameBusy;
   $('btn-flee').disabled = !on || gameBusy;
   $('btn-heal').disabled = gameBusy || player.potions <= 0 || player.hp >= player.maxHp;
