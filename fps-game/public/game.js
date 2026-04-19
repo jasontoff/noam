@@ -72,6 +72,10 @@ let weapons = {};
 let selectedWeapon = 'pistol';
 let selectedGun = 'pistol';
 let holdingKnife = false;
+let mouseDown = false;
+let sniperZoomed = false;
+const DEFAULT_FOV = 75;
+const SNIPER_ZOOM_FOV = 25;
 let abilities = {};
 let selectedAbility = 'speed';
 let abilityActive = false;
@@ -435,6 +439,7 @@ function switchToGun(gunId) {
   holdingKnife = false;
   selectedGun = gunId;
   selectedWeapon = gunId;
+  if (gunId !== 'sniper') setSniperZoom(false);
   socket.emit('selectWeapon', gunId);
   updateWeaponHUD();
   updateFPWeapon();
@@ -458,9 +463,9 @@ function updateWeaponHUD() {
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a1a2e);
-  scene.fog = new THREE.Fog(0x1a1a2e, 30, 60);
+  scene.fog = new THREE.Fog(0x1a1a2e, 50, 130);
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
   camera.position.set(0, PLAYER_HEIGHT, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -479,11 +484,11 @@ function init() {
   dirLight.shadow.mapSize.width = 2048;
   dirLight.shadow.mapSize.height = 2048;
   dirLight.shadow.camera.near = 0.5;
-  dirLight.shadow.camera.far = 80;
-  dirLight.shadow.camera.left = -30;
-  dirLight.shadow.camera.right = 30;
-  dirLight.shadow.camera.top = 30;
-  dirLight.shadow.camera.bottom = -30;
+  dirLight.shadow.camera.far = 160;
+  dirLight.shadow.camera.left = -60;
+  dirLight.shadow.camera.right = 60;
+  dirLight.shadow.camera.top = 60;
+  dirLight.shadow.camera.bottom = -60;
   scene.add(dirLight);
 
   // Point lights for atmosphere
@@ -496,7 +501,7 @@ function init() {
   });
 
   // Ground
-  const groundGeo = new THREE.PlaneGeometry(50, 50, 50, 50);
+  const groundGeo = new THREE.PlaneGeometry(100, 100, 100, 100);
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x2a2a3a,
     roughness: 0.8,
@@ -508,11 +513,11 @@ function init() {
   scene.add(ground);
 
   // Grid overlay on ground
-  const gridHelper = new THREE.GridHelper(50, 50, 0x3a3a5a, 0x2a2a4a);
+  const gridHelper = new THREE.GridHelper(100, 100, 0x3a3a5a, 0x2a2a4a);
   scene.add(gridHelper);
 
   // Skybox-ish ceiling glow
-  const ceilGeo = new THREE.PlaneGeometry(50, 50);
+  const ceilGeo = new THREE.PlaneGeometry(100, 100);
   const ceilMat = new THREE.MeshBasicMaterial({ color: 0x0a0a1e, side: THREE.DoubleSide });
   const ceil = new THREE.Mesh(ceilGeo, ceilMat);
   ceil.position.y = 10;
@@ -736,6 +741,8 @@ function setupControls() {
       socket.emit('setPaused', false);
     } else {
       blocker.style.display = 'flex';
+      mouseDown = false;
+      setSniperZoom(false);
       if (hasJoined) socket.emit('setPaused', true);
     }
   });
@@ -749,13 +756,28 @@ function setupControls() {
 
   document.addEventListener('mousedown', (e) => {
     if (!isLocked) return;
-    if (e.button === 0) shoot();
+    if (e.button === 0) {
+      mouseDown = true;
+      shoot();
+    } else if (e.button === 2 && selectedWeapon === 'sniper' && !holdingKnife) {
+      setSniperZoom(true);
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 0) mouseDown = false;
+    else if (e.button === 2) setSniperZoom(false);
+  });
+
+  document.addEventListener('contextmenu', (e) => {
+    if (isLocked) e.preventDefault();
   });
 
   document.addEventListener('wheel', (e) => {
     if (!isLocked) return;
     holdingKnife = !holdingKnife;
     selectedWeapon = holdingKnife ? 'knife' : selectedGun;
+    if (holdingKnife || selectedGun !== 'sniper') setSniperZoom(false);
     socket.emit('switchWeapon', holdingKnife ? 'knife' : 'gun');
     updateWeaponHUD();
     updateFPWeapon();
@@ -789,6 +811,7 @@ function setupControls() {
       case 'Digit6':
         holdingKnife = true;
         selectedWeapon = 'knife';
+        setSniperZoom(false);
         socket.emit('switchWeapon', 'knife');
         updateWeaponHUD();
         updateFPWeapon();
@@ -811,14 +834,29 @@ function setupControls() {
 //  SHOOTING
 // ============================================
 
+function setSniperZoom(on) {
+  if (on === sniperZoomed) return;
+  sniperZoomed = on;
+  camera.fov = on ? SNIPER_ZOOM_FOV : DEFAULT_FOV;
+  camera.updateProjectionMatrix();
+  if (fpWeaponGroup) fpWeaponGroup.visible = !on;
+}
+
 function shoot() {
   if (!canShoot) return;
   const me = players[myId];
   if (!me || !me.alive) return;
 
   const weapon = weapons[selectedWeapon] || weapons.pistol;
+  const cooldown = weapon.fireRate || 400;
   canShoot = false;
-  setTimeout(() => canShoot = true, weapon.fireRate || 400);
+  setTimeout(() => {
+    canShoot = true;
+    // Auto-fire for minigun while holding mouse button
+    if (mouseDown && isLocked && selectedWeapon === 'minigun' && !holdingKnife) {
+      shoot();
+    }
+  }, cooldown);
 
   // Get camera direction
   const dir = new THREE.Vector3(0, 0, -1);
