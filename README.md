@@ -104,6 +104,24 @@ Open http://localhost:3002 in two tabs (or on two devices on the same LAN). Need
 
 ---
 
+## rpg-game
+
+Single-player browser RPG ("Crypts & Loot"). Turn-based combat, leveling, gear drops with rarities, and progressive zones. Pure client-side — no backend.
+
+**Live at:** [noam.bot/rpg-game](https://noam.bot/rpg-game/)
+
+### Run locally
+
+```bash
+cd rpg-game
+npm install
+npm start
+```
+
+Open http://localhost:3004. Click "Find Enemy" to start a fight. Loot drops automatically fill empty gear slots; extras land in your inventory to equip or sell.
+
+---
+
 ## Repo layout
 
 ```
