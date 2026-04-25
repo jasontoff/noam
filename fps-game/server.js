@@ -125,59 +125,109 @@ const ABILITIES = {
   },
 };
 
-// Map obstacles (boxes) - {x, y, z, w, h, d}  y = center height
+// Map obstacles (boxes) - {x, y, z, w, h, d, theme}
 // Map is 100x100, split into four 50x50 quadrants by themes:
-//   NW (-x,-z): one very tall tower
-//   NE (+x,-z): many short towers
+//   NW (-x,-z): one very tall climbable tower
+//   NE (+x,-z): many short towers (jumpable from ground)
 //   SW (-x,+z): blank
 //   SE (+x,+z): special things (stairs, platforms, bridge, pillars, arch, walls)
 const obstacles = [
-  // === OUTER WALLS (tall) ===
-  { x: 0, y: 3, z: -50, w: 100, h: 6, d: 1 },
-  { x: 0, y: 3, z: 50, w: 100, h: 6, d: 1 },
-  { x: -50, y: 3, z: 0, w: 1, h: 6, d: 100 },
-  { x: 50, y: 3, z: 0, w: 1, h: 6, d: 100 },
+  // === OUTER WALLS ===
+  { x: 0, y: 3, z: -50, w: 100, h: 6, d: 1, theme: 'wall' },
+  { x: 0, y: 3, z: 50, w: 100, h: 6, d: 1, theme: 'wall' },
+  { x: -50, y: 3, z: 0, w: 1, h: 6, d: 100, theme: 'wall' },
+  { x: 50, y: 3, z: 0, w: 1, h: 6, d: 100, theme: 'wall' },
 
-  // === NW QUADRANT: ONE VERY TALL TOWER ===
-  { x: -25, y: 9, z: -25, w: 6, h: 18, d: 6 },
+  // === NW QUADRANT: ONE VERY TALL CLIMBABLE TOWER ===
+  // Body: 6x6 footprint, top at y=28
+  { x: -25, y: 14, z: -25, w: 6, h: 28, d: 6, theme: 'tower-tall' },
+  // Spiral staircase obstacles are pushed below
 
-  // === NE QUADRANT: MANY SHORT TOWERS (3x3 grid of jumpable pillars) ===
-  { x: 12, y: 1.25, z: -12, w: 2, h: 2.5, d: 2 },
-  { x: 25, y: 1.25, z: -12, w: 2, h: 2.5, d: 2 },
-  { x: 38, y: 1.25, z: -12, w: 2, h: 2.5, d: 2 },
-  { x: 12, y: 1.25, z: -25, w: 2, h: 2.5, d: 2 },
-  { x: 25, y: 1.25, z: -25, w: 2, h: 2.5, d: 2 },
-  { x: 38, y: 1.25, z: -25, w: 2, h: 2.5, d: 2 },
-  { x: 12, y: 1.25, z: -38, w: 2, h: 2.5, d: 2 },
-  { x: 25, y: 1.25, z: -38, w: 2, h: 2.5, d: 2 },
-  { x: 38, y: 1.25, z: -38, w: 2, h: 2.5, d: 2 },
+  // === NE QUADRANT: MANY SHORT TOWERS (jumpable from ground) ===
+  // Heights vary 1.0-1.6m so each is a single hop from ground level.
+  { x: 12, y: 0.5,  z: -12, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
+  { x: 25, y: 0.7,  z: -12, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
+  { x: 38, y: 0.5,  z: -12, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
+  { x: 12, y: 0.7,  z: -25, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
+  { x: 25, y: 0.6,  z: -25, w: 3, h: 1.2, d: 3, theme: 'tower-short' },
+  { x: 38, y: 0.7,  z: -25, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
+  { x: 12, y: 0.5,  z: -38, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
+  { x: 25, y: 0.7,  z: -38, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
+  { x: 38, y: 0.5,  z: -38, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
 
-  // === SW QUADRANT: BLANK (no obstacles) ===
+  // === SW QUADRANT: BLANK ===
 
   // === SE QUADRANT: SPECIAL THINGS ===
-  // Staircase climbing east up to a platform
-  { x: 12, y: 0.25, z: 13, w: 2, h: 0.5, d: 3 },
-  { x: 14, y: 0.5,  z: 13, w: 2, h: 1.0, d: 3 },
-  { x: 16, y: 0.75, z: 13, w: 2, h: 1.5, d: 3 },
-  { x: 18, y: 1.0,  z: 13, w: 2, h: 2.0, d: 3 },
-  // Top platform extending east
-  { x: 24, y: 2.0,  z: 13, w: 8, h: 0.3, d: 4 },
-  // Bridge to a second platform
-  { x: 32, y: 2.0,  z: 13, w: 8, h: 0.3, d: 1.5 },
-  { x: 39, y: 2.0,  z: 13, w: 4, h: 0.3, d: 4 },
+  // Slide-style staircase up to a platform
+  { x: 12, y: 0.25, z: 13, w: 2, h: 0.5, d: 3, theme: 'stair-climb' },
+  { x: 14, y: 0.5,  z: 13, w: 2, h: 1.0, d: 3, theme: 'stair-climb' },
+  { x: 16, y: 0.75, z: 13, w: 2, h: 1.5, d: 3, theme: 'stair-climb' },
+  { x: 18, y: 1.0,  z: 13, w: 2, h: 2.0, d: 3, theme: 'stair-climb' },
+  // Top platform extending east, then bridge to a second platform
+  { x: 24, y: 2.0,  z: 13, w: 8, h: 0.3, d: 4, theme: 'platform' },
+  { x: 32, y: 2.0,  z: 13, w: 8, h: 0.3, d: 1.5, theme: 'bridge' },
+  { x: 39, y: 2.0,  z: 13, w: 4, h: 0.3, d: 4, theme: 'platform' },
 
   // L-shaped wall cover
-  { x: 25, y: 1.5,  z: 30, w: 14, h: 3, d: 1 },
-  { x: 32, y: 1.5,  z: 35, w: 1, h: 3, d: 10 },
+  { x: 25, y: 1.5,  z: 30, w: 14, h: 3, d: 1, theme: 'wall-cover' },
+  { x: 32, y: 1.5,  z: 35, w: 1, h: 3, d: 10, theme: 'wall-cover' },
 
   // Three pillars of different heights
-  { x: 12, y: 4.0,  z: 35, w: 2.5, h: 8, d: 2.5 }, // tall
-  { x: 18, y: 2.5,  z: 40, w: 2.0, h: 5, d: 2.0 }, // medium
-  { x: 24, y: 1.0,  z: 42, w: 2.0, h: 2, d: 2.0 }, // short
+  { x: 12, y: 4.0,  z: 35, w: 2.5, h: 8, d: 2.5, theme: 'pillar-tall' },
+  { x: 18, y: 2.5,  z: 40, w: 2.0, h: 5, d: 2.0, theme: 'pillar-mid' },
+  { x: 24, y: 1.0,  z: 42, w: 2.0, h: 2, d: 2.0, theme: 'pillar-short' },
 
+  // Stairs leading up to the floating arch
+  { x: 10, y: 0.5, z: 25, w: 1, h: 1, d: 3, theme: 'stair-climb' },
+  { x: 11, y: 1.0, z: 25, w: 1, h: 2, d: 3, theme: 'stair-climb' },
+  { x: 12, y: 1.5, z: 25, w: 1, h: 3, d: 3, theme: 'stair-climb' },
+  { x: 13, y: 2.0, z: 25, w: 1, h: 4, d: 3, theme: 'stair-climb' },
+  { x: 14, y: 2.5, z: 25, w: 1, h: 5, d: 3, theme: 'stair-climb' },
   // Floating arch / sniper perch
-  { x: 18, y: 5.0,  z: 25, w: 6, h: 0.4, d: 3 },
+  { x: 18, y: 5.0, z: 25, w: 6, h: 0.4, d: 3, theme: 'arch' },
 ];
+
+// Spiral staircase wrapping the NW tall tower (1m rise per step).
+// The tower is centered at (-25,-25) with a 6x6 footprint (edges at ±3 from center).
+// 28 steps total -> top at y=28 = tower top.
+(function buildTowerSpiral() {
+  const cx = -25, cz = -25, half = 3.0;
+  const stepW = 2.0; // wide enough that adjacent steps overlap at corners
+  for (let i = 0; i < 28; i++) {
+    const top = i + 1;            // top y of this step
+    const sideIdx = Math.floor(i / 7);
+    const k = i % 7;
+    let x, z;
+    if (sideIdx === 0) {
+      // South face, going west
+      x = cx + half - 0.5 - k;    // -22.5 ... -28.5
+      z = cz + half + 1;          // -21
+    } else if (sideIdx === 1) {
+      // West face, going north
+      x = cx - half - 1;          // -29
+      z = cz + half - 0.5 - k;    // -22.5 ... -28.5
+    } else if (sideIdx === 2) {
+      // North face, going east
+      x = cx - half + 0.5 + k;    // -27.5 ... -21.5
+      z = cz - half - 1;          // -29
+    } else {
+      // East face, going south
+      x = cx + half + 1;          // -21
+      z = cz - half + 0.5 + k;    // -27.5 ... -21.5
+    }
+    obstacles.push({
+      x, y: top / 2, z,
+      w: stepW, h: top, d: stepW,
+      theme: 'spiral-step',
+    });
+  }
+  // Final landing block that bridges the last step onto the tower top
+  obstacles.push({
+    x: cx + half - 0.5, y: 14, z: cz + half - 0.5,
+    w: 2.0, h: 28, d: 2.0,
+    theme: 'spiral-step',
+  });
+})();
 
 const spawnPoints = [
   // NW (tall tower) — keep clear of the tower at (-25,-25)
