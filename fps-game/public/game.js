@@ -462,8 +462,9 @@ function updateWeaponHUD() {
 
 function init() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a1a2e);
-  scene.fog = new THREE.Fog(0x1a1a2e, 50, 130);
+  // Bright cheerful playground sky
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0xc8e7ff, 60, 140);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
   camera.position.set(0, PLAYER_HEIGHT, 0);
@@ -474,11 +475,13 @@ function init() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
 
-  // Lighting
-  const ambient = new THREE.AmbientLight(0x404060, 0.6);
+  // Lighting — bright, daylit playground feel
+  const ambient = new THREE.AmbientLight(0xffffff, 0.7);
   scene.add(ambient);
+  const hemi = new THREE.HemisphereLight(0xb6e3ff, 0x6dc06b, 0.55);
+  scene.add(hemi);
 
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  const dirLight = new THREE.DirectionalLight(0xfff4c4, 1.0);
   dirLight.position.set(10, 20, 10);
   dirLight.castShadow = true;
   dirLight.shadow.mapSize.width = 2048;
@@ -500,33 +503,134 @@ function init() {
     scene.add(light);
   });
 
-  // Ground
+  // Ground — bright playground grass
   const groundGeo = new THREE.PlaneGeometry(100, 100, 100, 100);
   const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x2a2a3a,
-    roughness: 0.8,
-    metalness: 0.2,
+    color: 0x6dc06b,
+    roughness: 0.95,
+    metalness: 0.0,
   });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Grid overlay on ground
-  const gridHelper = new THREE.GridHelper(100, 100, 0x3a3a5a, 0x2a2a4a);
+  // Quadrant ground tints (each 50x50 corner gets a pastel colour patch)
+  const quadrantTints = [
+    { x: -25, z: -25, color: 0xffd1dc }, // NW pink
+    { x:  25, z: -25, color: 0xfff4a3 }, // NE yellow
+    { x: -25, z:  25, color: 0xb6e3ff }, // SW sky blue
+    { x:  25, z:  25, color: 0xd9b6ff }, // SE lavender
+  ];
+  quadrantTints.forEach(t => {
+    const patch = new THREE.Mesh(
+      new THREE.PlaneGeometry(48, 48),
+      new THREE.MeshStandardMaterial({ color: t.color, roughness: 1, transparent: true, opacity: 0.55 })
+    );
+    patch.rotation.x = -Math.PI / 2;
+    patch.position.set(t.x, 0.02, t.z);
+    patch.receiveShadow = true;
+    scene.add(patch);
+  });
+
+  // Grid overlay on ground (bright, for playground feel)
+  const gridHelper = new THREE.GridHelper(100, 50, 0xffffff, 0xeeeeee);
+  gridHelper.position.y = 0.03;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.35;
   scene.add(gridHelper);
 
-  // Skybox-ish ceiling glow
-  const ceilGeo = new THREE.PlaneGeometry(100, 100);
-  const ceilMat = new THREE.MeshBasicMaterial({ color: 0x0a0a1e, side: THREE.DoubleSide });
-  const ceil = new THREE.Mesh(ceilGeo, ceilMat);
-  ceil.position.y = 10;
-  ceil.rotation.x = Math.PI / 2;
-  scene.add(ceil);
+  // Decorative balloons floating above each quadrant
+  addPlaygroundDecorations();
 
   setupControls();
   createFPWeapon();
   window.addEventListener('resize', onResize);
+}
+
+// Purely decorative playground props (no collision)
+function addPlaygroundDecorations() {
+  // Fluffy clouds scattered above the map
+  const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const cloudSpots = [
+    [-30,  35, -30], [ 30,  38,  30], [  0,  40,  20],
+    [-35,  36,  10], [ 35,  37, -10], [-15,  42, -40],
+    [ 20,  39,  40],
+  ];
+  cloudSpots.forEach(([cx, cy, cz]) => {
+    const cloud = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const s = 2 + Math.random() * 1.5;
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 8), cloudMat);
+      puff.position.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 4);
+      cloud.add(puff);
+    }
+    cloud.position.set(cx, cy, cz);
+    scene.add(cloud);
+  });
+
+  // Balloon clusters tethered above each quadrant
+  const balloonColors = [0xff5577, 0xffd244, 0x55c2ff, 0xb16bff, 0x77e07a, 0xff944d];
+  const balloonAnchors = [
+    { x: -25, z: -25, h: 32 }, // NW (above tall tower)
+    { x:  25, z: -25, h: 12 }, // NE
+    { x: -25, z:  25, h: 12 }, // SW
+    { x:  25, z:  25, h: 14 }, // SE
+  ];
+  balloonAnchors.forEach((a) => {
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2;
+      const r = 1.5;
+      const bx = a.x + Math.cos(angle) * r;
+      const bz = a.z + Math.sin(angle) * r;
+      const by = a.h + Math.random() * 1.5;
+      const balloonMat = new THREE.MeshStandardMaterial({
+        color: balloonColors[(i + a.x + a.z) % balloonColors.length],
+        roughness: 0.4,
+        emissive: balloonColors[(i + a.x + a.z) % balloonColors.length],
+        emissiveIntensity: 0.15,
+      });
+      const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 12), balloonMat);
+      balloon.scale.y = 1.3;
+      balloon.position.set(bx, by, bz);
+      scene.add(balloon);
+      // String down to anchor
+      const stringMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+      const stringGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(bx, by - 0.7, bz),
+        new THREE.Vector3(a.x, a.h - 1.5, a.z),
+      ]);
+      scene.add(new THREE.Line(stringGeo, stringMat));
+    }
+  });
+
+  // Flag pole + flag on top of the tall NW tower
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.4, metalness: 0.7 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 5, 8), poleMat);
+  pole.position.set(-25, 30.5, -25);
+  scene.add(pole);
+  const flagMat = new THREE.MeshStandardMaterial({ color: 0xff3366, side: THREE.DoubleSide, roughness: 0.6 });
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(2, 1.2), flagMat);
+  flag.position.set(-23.9, 32.2, -25);
+  scene.add(flag);
+
+  // Party-hat cones on top of each NE short tower (purely decorative)
+  const hatColors = [0xff5577, 0x55c2ff, 0xffd244, 0xb16bff, 0x77e07a, 0xff944d, 0xff5577, 0x55c2ff, 0xffd244];
+  const neGrid = [-12, -25, -38];
+  let hatIdx = 0;
+  for (const tx of [12, 25, 38]) {
+    for (const tz of neGrid) {
+      const hatMat = new THREE.MeshStandardMaterial({ color: hatColors[hatIdx % hatColors.length], roughness: 0.6 });
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.4, 12), hatMat);
+      // Determine top of the tower (heights vary 1.0/1.2/1.4)
+      const top = (Math.abs(tx) === 25 || Math.abs(tz) === 25)
+        ? (tx === 25 && tz === -25 ? 1.2 : 1.4)
+        : 1.0;
+      hat.position.set(tx, top + 0.7, tz);
+      scene.add(hat);
+      hatIdx++;
+    }
+  }
 }
 
 // ============================================
@@ -904,35 +1008,47 @@ function shoot() {
 
 function createObstacles(obstacleData) {
   obstacles = obstacleData;
+
+  // Bright playground-themed material per obstacle theme
+  const themePalette = {
+    'wall':         { color: 0xffe1c4, roughness: 0.85, metalness: 0.05 },
+    'tower-tall':   { color: 0xff3d7f, roughness: 0.55, metalness: 0.1, emissive: 0x331020, emissiveIntensity: 0.6 },
+    'tower-short': null, // colored by index below
+    'spiral-step': null,
+    'stair-climb': null,
+    'platform':     { color: 0x4ec0ff, roughness: 0.4, metalness: 0.2 },
+    'bridge':       { color: 0xffaf3a, roughness: 0.5, metalness: 0.2 },
+    'wall-cover':   { color: 0x9a5cff, roughness: 0.6, metalness: 0.1 },
+    'pillar-tall':  { color: 0xff5b4a, roughness: 0.5, metalness: 0.2 },
+    'pillar-mid':   { color: 0x4ed16b, roughness: 0.5, metalness: 0.2 },
+    'pillar-short': { color: 0xffe14d, roughness: 0.5, metalness: 0.2 },
+    'arch':         { color: 0xff67e1, roughness: 0.4, metalness: 0.3, emissive: 0x440033, emissiveIntensity: 0.5 },
+  };
+  const cycleShortTower = [0xff5b4a, 0x4ed16b, 0xffe14d, 0x4ec0ff, 0xff67e1, 0x9a5cff, 0xffaf3a, 0x4ed16b, 0xff5b4a];
+  const cycleStair      = [0xffe14d, 0x4ec0ff]; // alternating yellow / blue
+  const cycleSpiral     = [0xff5b4a, 0xffe14d, 0x4ed16b, 0x4ec0ff, 0x9a5cff, 0xff67e1]; // rainbow
+
+  let shortIdx = 0, stairIdx = 0, spiralIdx = 0;
+
   obstacleData.forEach((obs, i) => {
     const geo = new THREE.BoxGeometry(obs.w, obs.h, obs.d);
 
-    // Different styles for walls vs cover
-    let mat;
-    if (obs.w >= 50 || obs.d >= 50) {
-      // Walls
-      mat = new THREE.MeshStandardMaterial({
-        color: 0x3a3a5a,
-        roughness: 0.9,
-        metalness: 0.1,
-      });
-    } else if (obs.w >= 4 && obs.h >= 4) {
-      // Center block
-      mat = new THREE.MeshStandardMaterial({
-        color: 0x5a2a2a,
-        roughness: 0.7,
-        metalness: 0.3,
-        emissive: 0x1a0a0a,
-      });
+    let matSpec;
+    const theme = obs.theme;
+    if (theme === 'tower-short') {
+      matSpec = { color: cycleShortTower[shortIdx++ % cycleShortTower.length], roughness: 0.5, metalness: 0.2 };
+    } else if (theme === 'stair-climb') {
+      matSpec = { color: cycleStair[stairIdx++ % cycleStair.length], roughness: 0.55, metalness: 0.15 };
+    } else if (theme === 'spiral-step') {
+      matSpec = { color: cycleSpiral[spiralIdx++ % cycleSpiral.length], roughness: 0.55, metalness: 0.15 };
+    } else if (themePalette[theme]) {
+      matSpec = themePalette[theme];
     } else {
-      // Cover
-      mat = new THREE.MeshStandardMaterial({
-        color: 0x4a4a6a,
-        roughness: 0.6,
-        metalness: 0.4,
-      });
+      // Fallback for any untagged obstacles
+      matSpec = { color: 0xb0b0c0, roughness: 0.7, metalness: 0.1 };
     }
 
+    const mat = new THREE.MeshStandardMaterial(matSpec);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(obs.x, obs.y, obs.z);
     mesh.castShadow = true;
@@ -940,9 +1056,9 @@ function createObstacles(obstacleData) {
     scene.add(mesh);
     obstacleMeshes.push(mesh);
 
-    // Add edge wireframe for style
+    // Edge wireframe in soft white to enhance the playground look
     const edges = new THREE.EdgesGeometry(geo);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x6a6a8a, transparent: true, opacity: 0.3 }));
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 }));
     line.position.copy(mesh.position);
     scene.add(line);
   });
@@ -1335,7 +1451,7 @@ function resolveCollision(oldX, oldZ, newX, newZ, y) {
 
 function drawMinimap() {
   const w = 150, h = 150;
-  const scale = w / 50; // 50 unit map -> 150px
+  const scale = w / 100; // 100 unit map -> 150px
 
   minimapCtx.clearRect(0, 0, w, h);
   minimapCtx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -1344,8 +1460,8 @@ function drawMinimap() {
   // Draw obstacles
   minimapCtx.fillStyle = 'rgba(100,100,150,0.6)';
   for (const obs of obstacles) {
-    const ox = (obs.x + 25) * scale;
-    const oz = (obs.z + 25) * scale;
+    const ox = (obs.x + 50) * scale;
+    const oz = (obs.z + 50) * scale;
     const ow = obs.w * scale;
     const od = obs.d * scale;
     minimapCtx.fillRect(ox - ow / 2, oz - od / 2, ow, od);
@@ -1356,8 +1472,8 @@ function drawMinimap() {
     if (id === myId) continue;
     const p = players[id];
     if (!p.alive) continue;
-    const px = (p.x + 25) * scale;
-    const pz = (p.z + 25) * scale;
+    const px = (p.x + 50) * scale;
+    const pz = (p.z + 50) * scale;
     minimapCtx.fillStyle = '#' + p.color.toString(16).padStart(6, '0');
     minimapCtx.beginPath();
     minimapCtx.arc(px, pz, 3, 0, Math.PI * 2);
@@ -1367,8 +1483,8 @@ function drawMinimap() {
   // Draw self
   const me = players[myId];
   if (me) {
-    const mx = (me.x + 25) * scale;
-    const mz = (me.z + 25) * scale;
+    const mx = (me.x + 50) * scale;
+    const mz = (me.z + 50) * scale;
     minimapCtx.fillStyle = '#0f0';
     minimapCtx.beginPath();
     minimapCtx.arc(mx, mz, 4, 0, Math.PI * 2);
@@ -1495,8 +1611,8 @@ function animate() {
     camera.position.z = resolved.z;
 
     // Clamp to map bounds
-    camera.position.x = Math.max(-24, Math.min(24, camera.position.x));
-    camera.position.z = Math.max(-24, Math.min(24, camera.position.z));
+    camera.position.x = Math.max(-49, Math.min(49, camera.position.x));
+    camera.position.z = Math.max(-49, Math.min(49, camera.position.z));
 
     // Apply camera rotation
     camera.rotation.order = 'YXZ';
