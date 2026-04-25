@@ -75,7 +75,7 @@ let holdingKnife = false;
 let mouseDown = false;
 let sniperZoomed = false;
 const DEFAULT_FOV = 75;
-const SNIPER_ZOOM_FOV = 25;
+const SNIPER_ZOOM_FOV = 12;
 let abilities = {};
 let selectedAbility = 'speed';
 let abilityActive = false;
@@ -1018,6 +1018,9 @@ function createObstacles(obstacleData) {
     'pillar-mid':   { color: 0x4ed16b, roughness: 0.5, metalness: 0.2 },
     'pillar-short': { color: 0xffe14d, roughness: 0.5, metalness: 0.2 },
     'arch':         { color: 0xff67e1, roughness: 0.4, metalness: 0.3, emissive: 0x440033, emissiveIntensity: 0.5 },
+    'ladder-rung':  { color: 0xfff7d4, roughness: 0.6, metalness: 0.05 },
+    'launch-pad':   { color: 0xff5b1a, roughness: 0.3, metalness: 0.4, emissive: 0xff3300, emissiveIntensity: 0.9 },
+    'sky-platform': { color: 0xb6e3ff, roughness: 0.4, metalness: 0.3, emissive: 0x224466, emissiveIntensity: 0.4 },
   };
   const cycleShortTower = [0xff5b4a, 0x4ed16b, 0xffe14d, 0x4ec0ff, 0xff67e1, 0x9a5cff, 0xffaf3a, 0x4ed16b, 0xff5b4a];
   const cycleStair      = [0xffe14d, 0x4ec0ff]; // alternating yellow / blue
@@ -1392,6 +1395,26 @@ function getGroundHeight(x, z, radius) {
   return ground;
 }
 
+// Get the obstacle whose top the player is standing on (or null if just floor)
+function getGroundObstacle(x, z, radius) {
+  let bestTop = 0, bestObs = null;
+  for (const obs of obstacles) {
+    const halfW = obs.w / 2 + radius;
+    const halfD = obs.d / 2 + radius;
+    if (
+      x >= obs.x - halfW && x <= obs.x + halfW &&
+      z >= obs.z - halfD && z <= obs.z + halfD
+    ) {
+      const obsTop = obs.y + obs.h / 2;
+      if (obsTop > bestTop) {
+        bestTop = obsTop;
+        bestObs = obs;
+      }
+    }
+  }
+  return bestObs;
+}
+
 // Check if there's a ceiling above the player
 function getCeilingHeight(x, z, feetY, radius) {
   let ceiling = 100; // default no ceiling
@@ -1578,9 +1601,17 @@ function animate() {
 
       if (newY <= floorY) {
         newY = floorY;
-        velocity.y = 0;
-        canJump = true;
-        isJumping = false;
+        const grndObs = getGroundObstacle(camera.position.x, camera.position.z, 0.3);
+        if (grndObs && grndObs.theme === 'launch-pad') {
+          velocity.y = grndObs.boost || 22;
+          canJump = false;
+          isJumping = true;
+          playSound('jump');
+        } else {
+          velocity.y = 0;
+          canJump = true;
+          isJumping = false;
+        }
       }
 
       // Ceiling collision (head bump)
@@ -1656,6 +1687,28 @@ function animate() {
     mesh.rotation.y = -player.ry;
   }
 
+  // Animate active ability effects (shield pulse, wings flap, etc.)
+  const _abilityT = performance.now() * 0.001;
+  for (const id in playerMeshes) {
+    const fx = playerMeshes[id] && playerMeshes[id].abilityEffect;
+    if (!fx) continue;
+    const k = fx.userData && fx.userData.kind;
+    if (k === 'shield') {
+      fx.rotation.y += delta * 0.6;
+      const s = 1 + Math.sin(_abilityT * 5) * 0.04;
+      fx.scale.set(s, s, s);
+    } else if (k === 'wings') {
+      const flap = Math.sin(_abilityT * 12) * 0.4;
+      if (fx.userData.left)  fx.userData.left.rotation.y  = -Math.PI / 8 - flap;
+      if (fx.userData.right) fx.userData.right.rotation.y =  Math.PI / 8 + flap;
+    } else if (k === 'heal') {
+      fx.rotation.y += delta * 1.2;
+      fx.position.y = Math.sin(_abilityT * 3) * 0.05;
+    } else if (k === 'speed') {
+      fx.position.y = Math.sin(_abilityT * 8) * 0.04;
+    }
+  }
+
   // Update bullet positions (client-side prediction)
   for (const id in bulletMeshes) {
     const mesh = bulletMeshes[id];
@@ -1674,12 +1727,6 @@ function animate() {
   updateAbilityHUD();
   drawMinimap();
   updateScoreboard();
-  // Animate healing potion (float and spin)
-  if (potionMesh) {
-    const t = performance.now() * 0.001;
-    potionMesh.position.y = 0.5 + Math.sin(t * 2) * 0.15;
-    potionMesh.rotation.y = t * 1.5;
-  }
 
   // Animate first-person weapon
   if (fpWeaponGroup) {
@@ -1850,67 +1897,101 @@ socket.on('explosion', (data) => {
   createExplosion(data.x, data.y, data.z, data.radius);
 });
 
-// Healing potion
-let potionMesh = null;
+// (Healing potions intentionally removed — damage is permanent unless
+//  you use the Heal special ability.)
 
-socket.on('potionSpawned', (potion) => {
-  // Remove old potion mesh if any
-  if (potionMesh) { scene.remove(potionMesh); potionMesh = null; }
-
+// Build a per-ability decorative effect (returned as a THREE.Group) that
+// lives in the player mesh's local space. Player group origin sits ~0.6m
+// above the feet, so y=0 ≈ chest, y=-0.6 ≈ feet, y=+1.0 ≈ top of head.
+function createAbilityEffect(abilityId) {
   const group = new THREE.Group();
+  group.userData.startTime = performance.now();
 
-  // Bottle body
-  const bottleGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.4, 8);
-  const bottleMat = new THREE.MeshStandardMaterial({
-    color: 0x44ff44, emissive: 0x00ff00, emissiveIntensity: 0.4,
-    transparent: true, opacity: 0.7, metalness: 0.3, roughness: 0.2,
-  });
-  const bottle = new THREE.Mesh(bottleGeo, bottleMat);
-  group.add(bottle);
-
-  // Bottle neck
-  const neckGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.15, 8);
-  const neck = new THREE.Mesh(neckGeo, bottleMat);
-  neck.position.y = 0.25;
-  group.add(neck);
-
-  // Cork
-  const corkGeo = new THREE.CylinderGeometry(0.07, 0.08, 0.06, 8);
-  const corkMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.9 });
-  const cork = new THREE.Mesh(corkGeo, corkMat);
-  cork.position.y = 0.35;
-  group.add(cork);
-
-  // Cross symbol
-  const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.02),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5 }));
-  crossH.position.set(0, 0, 0.21);
-  group.add(crossH);
-  const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.02),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.5 }));
-  crossV.position.set(0, 0, 0.21);
-  group.add(crossV);
-
-  // Glow light
-  const light = new THREE.PointLight(0x44ff44, 1, 5);
-  light.position.y = 0.2;
-  group.add(light);
-
-  group.position.set(potion.x, potion.y, potion.z);
-  group.potionId = potion.id;
-  scene.add(group);
-  potionMesh = group;
-});
-
-socket.on('potionPickedUp', (data) => {
-  if (potionMesh) {
-    scene.remove(potionMesh);
-    potionMesh = null;
+  if (abilityId === 'shield') {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1.05, 18, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0x66aaff, transparent: true, opacity: 0.28,
+        emissive: 0x2244aa, emissiveIntensity: 0.7,
+        side: THREE.DoubleSide,
+      })
+    );
+    dome.position.y = 0;
+    group.add(dome);
+    const hex = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(1.1, 1),
+      new THREE.MeshBasicMaterial({ color: 0xaaddff, wireframe: true, transparent: true, opacity: 0.55 })
+    );
+    group.add(hex);
+    group.userData.kind = 'shield';
+  } else if (abilityId === 'heal') {
+    // Bandage wraps + green plus floating above
+    const wrapMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+    for (let i = 0; i < 3; i++) {
+      const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.09, 8, 18), wrapMat);
+      wrap.rotation.set(Math.PI / 2.1, 0, (i - 1) * 0.35);
+      wrap.position.y = 0.1 - i * 0.25;
+      group.add(wrap);
+    }
+    const crossMat = new THREE.MeshBasicMaterial({ color: 0x44ff66 });
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.1), crossMat);
+    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.1), crossMat);
+    crossH.position.y = 1.4; crossV.position.y = 1.4;
+    group.add(crossH); group.add(crossV);
+    group.userData.kind = 'heal';
+  } else if (abilityId === 'wings') {
+    const wingMat = new THREE.MeshStandardMaterial({
+      color: 0xfff8d6, side: THREE.DoubleSide,
+      roughness: 0.5, emissive: 0xffaa44, emissiveIntensity: 0.35,
+    });
+    function wingShape(mirror) {
+      const s = new THREE.Shape();
+      const m = mirror ? -1 : 1;
+      s.moveTo(0, 0);
+      s.bezierCurveTo(m * 0.4, 0.5, m * 1.1, 0.5, m * 1.3, 0.1);
+      s.bezierCurveTo(m * 1.2, -0.1, m * 0.9, -0.45, m * 0.6, -0.55);
+      s.bezierCurveTo(m * 0.3, -0.4, m * 0.1, -0.2, 0, 0);
+      return s;
+    }
+    const left = new THREE.Mesh(new THREE.ShapeGeometry(wingShape(true)), wingMat);
+    left.position.set(-0.1, 0.35, 0.15);
+    left.rotation.y = -Math.PI / 8;
+    group.add(left);
+    const right = new THREE.Mesh(new THREE.ShapeGeometry(wingShape(false)), wingMat);
+    right.position.set(0.1, 0.35, 0.15);
+    right.rotation.y = Math.PI / 8;
+    group.add(right);
+    group.userData.kind = 'wings';
+    group.userData.left = left;
+    group.userData.right = right;
+  } else if (abilityId === 'speed') {
+    const bootMat = new THREE.MeshStandardMaterial({
+      color: 0x3a7bff, roughness: 0.4, metalness: 0.4,
+      emissive: 0x1133aa, emissiveIntensity: 0.55,
+    });
+    const wingMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+    });
+    for (const dx of [-0.18, 0.18]) {
+      const boot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.34), bootMat);
+      boot.position.set(dx, -0.55, 0);
+      group.add(boot);
+      // Tiny winglet on the side of each boot
+      const wingShape = new THREE.Shape();
+      wingShape.moveTo(0, 0);
+      wingShape.lineTo(0.28, 0.06);
+      wingShape.lineTo(0.32, -0.08);
+      wingShape.lineTo(0, -0.04);
+      wingShape.lineTo(0, 0);
+      const wing = new THREE.Mesh(new THREE.ShapeGeometry(wingShape), wingMat);
+      wing.position.set(dx + (dx > 0 ? 0.05 : -0.05), -0.5, 0);
+      wing.rotation.y = dx > 0 ? 0 : Math.PI;
+      group.add(wing);
+    }
+    group.userData.kind = 'speed';
   }
-  if (data.playerId === myId) {
-    playSound('respawn'); // power-up sound for healing
-  }
-});
+  return group;
+}
 
 socket.on('abilityActivated', (data) => {
   if (data.playerId === myId) {
@@ -1920,21 +2001,33 @@ socket.on('abilityActivated', (data) => {
     abilityCooldownEnd = Date.now() + (ab ? ab.cooldown : 10000);
     playSound('respawn'); // power-up sound
   }
-  // Visual effect on other players
-  if (playerMeshes[data.playerId]) {
-    const mesh = playerMeshes[data.playerId];
-    const colors = { speed: 0x00ff00, shield: 0x4444ff, wings: 0xffff00, heal: 0xff44ff };
-    const effectColor = colors[data.ability] || 0xffffff;
-    const light = new THREE.PointLight(effectColor, 2, 8);
-    light.position.y = 1;
-    mesh.add(light);
-    setTimeout(() => mesh.remove(light), data.duration);
+  const mesh = playerMeshes[data.playerId];
+  if (mesh) {
+    // Drop any previous effect that's still attached
+    if (mesh.abilityEffect) {
+      mesh.remove(mesh.abilityEffect);
+      mesh.abilityEffect = null;
+    }
+    const fx = createAbilityEffect(data.ability);
+    mesh.add(fx);
+    mesh.abilityEffect = fx;
+    setTimeout(() => {
+      if (mesh.abilityEffect === fx) {
+        mesh.remove(fx);
+        mesh.abilityEffect = null;
+      }
+    }, data.duration);
   }
 });
 
 socket.on('abilityEnded', (data) => {
   if (data.playerId === myId) {
     abilityActive = false;
+  }
+  const mesh = playerMeshes[data.playerId];
+  if (mesh && mesh.abilityEffect) {
+    mesh.remove(mesh.abilityEffect);
+    mesh.abilityEffect = null;
   }
 });
 
