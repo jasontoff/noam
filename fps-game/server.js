@@ -11,7 +11,7 @@ const io = new Server(server, {
 
 app.use(express.static('public'));
 
-const GAME_VERSION = '1.0.0';
+const GAME_VERSION = '1.0.1';
 
 // Game state
 const players = {};
