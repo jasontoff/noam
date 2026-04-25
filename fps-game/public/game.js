@@ -491,11 +491,11 @@ function init() {
   dirLight.shadow.camera.bottom = -60;
   scene.add(dirLight);
 
-  // Point lights for atmosphere
+  // Point lights for atmosphere — one per quadrant
   const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
-  const positions = [[-15, 5, -15], [15, 5, -15], [-15, 5, 15], [15, 5, 15]];
+  const positions = [[-25, 8, -25], [25, 8, -25], [-25, 8, 25], [25, 8, 25]];
   positions.forEach((pos, i) => {
-    const light = new THREE.PointLight(colors[i], 0.5, 25);
+    const light = new THREE.PointLight(colors[i], 0.7, 50);
     light.position.set(...pos);
     scene.add(light);
   });

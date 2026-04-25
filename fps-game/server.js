@@ -126,93 +126,76 @@ const ABILITIES = {
 };
 
 // Map obstacles (boxes) - {x, y, z, w, h, d}  y = center height
+// Map is 100x100, split into four 50x50 quadrants by themes:
+//   NW (-x,-z): one very tall tower
+//   NE (+x,-z): many short towers
+//   SW (-x,+z): blank
+//   SE (+x,+z): special things (stairs, platforms, bridge, pillars, arch, walls)
 const obstacles = [
-  // Outer walls (tall)
+  // === OUTER WALLS (tall) ===
   { x: 0, y: 3, z: -50, w: 100, h: 6, d: 1 },
   { x: 0, y: 3, z: 50, w: 100, h: 6, d: 1 },
   { x: -50, y: 3, z: 0, w: 1, h: 6, d: 100 },
   { x: 50, y: 3, z: 0, w: 1, h: 6, d: 100 },
 
-  // === CENTER TOWER (multi-level) ===
-  { x: 0, y: 1, z: 0, w: 5, h: 2, d: 5 },        // base platform (jumpable)
-  { x: 0, y: 3, z: 0, w: 3, h: 2, d: 3 },          // upper platform
+  // === NW QUADRANT: ONE VERY TALL TOWER ===
+  { x: -25, y: 9, z: -25, w: 6, h: 18, d: 6 },
 
-  // === CORNER FORTS (4 corners, each with cover + platform) ===
-  // NW corner
-  { x: -18, y: 0.5, z: -18, w: 5, h: 1, d: 5 },   // low platform
-  { x: -18, y: 1.5, z: -20, w: 3, h: 1, d: 1 },   // step up
-  { x: -20, y: 1.5, z: -18, w: 1, h: 3, d: 3 },   // wall cover
-  // NE corner
-  { x: 18, y: 0.5, z: -18, w: 5, h: 1, d: 5 },
-  { x: 18, y: 1.5, z: -20, w: 3, h: 1, d: 1 },
-  { x: 20, y: 1.5, z: -18, w: 1, h: 3, d: 3 },
-  // SW corner
-  { x: -18, y: 0.5, z: 18, w: 5, h: 1, d: 5 },
-  { x: -18, y: 1.5, z: 20, w: 3, h: 1, d: 1 },
-  { x: -20, y: 1.5, z: 18, w: 1, h: 3, d: 3 },
-  // SE corner
-  { x: 18, y: 0.5, z: 18, w: 5, h: 1, d: 5 },
-  { x: 18, y: 1.5, z: 20, w: 3, h: 1, d: 1 },
-  { x: 20, y: 1.5, z: 18, w: 1, h: 3, d: 3 },
+  // === NE QUADRANT: MANY SHORT TOWERS (3x3 grid of jumpable pillars) ===
+  { x: 12, y: 1.25, z: -12, w: 2, h: 2.5, d: 2 },
+  { x: 25, y: 1.25, z: -12, w: 2, h: 2.5, d: 2 },
+  { x: 38, y: 1.25, z: -12, w: 2, h: 2.5, d: 2 },
+  { x: 12, y: 1.25, z: -25, w: 2, h: 2.5, d: 2 },
+  { x: 25, y: 1.25, z: -25, w: 2, h: 2.5, d: 2 },
+  { x: 38, y: 1.25, z: -25, w: 2, h: 2.5, d: 2 },
+  { x: 12, y: 1.25, z: -38, w: 2, h: 2.5, d: 2 },
+  { x: 25, y: 1.25, z: -38, w: 2, h: 2.5, d: 2 },
+  { x: 38, y: 1.25, z: -38, w: 2, h: 2.5, d: 2 },
 
-  // === MID-LANE COVER (between center and corners) ===
-  // North lane
-  { x: -8, y: 0.75, z: -12, w: 2, h: 1.5, d: 4 },
-  { x: 8, y: 0.75, z: -12, w: 2, h: 1.5, d: 4 },
-  // South lane
-  { x: -8, y: 0.75, z: 12, w: 2, h: 1.5, d: 4 },
-  { x: 8, y: 0.75, z: 12, w: 2, h: 1.5, d: 4 },
-  // East lane
-  { x: 12, y: 0.75, z: -8, w: 4, h: 1.5, d: 2 },
-  { x: 12, y: 0.75, z: 8, w: 4, h: 1.5, d: 2 },
-  // West lane
-  { x: -12, y: 0.75, z: -8, w: 4, h: 1.5, d: 2 },
-  { x: -12, y: 0.75, z: 8, w: 4, h: 1.5, d: 2 },
+  // === SW QUADRANT: BLANK (no obstacles) ===
 
-  // === ELEVATED BRIDGES (connecting areas) ===
-  { x: 0, y: 1.5, z: -8, w: 2, h: 0.3, d: 6 },   // north bridge
-  { x: 0, y: 1.5, z: 8, w: 2, h: 0.3, d: 6 },     // south bridge
-  { x: -8, y: 1.5, z: 0, w: 6, h: 0.3, d: 2 },    // west bridge
-  { x: 8, y: 1.5, z: 0, w: 6, h: 0.3, d: 2 },     // east bridge
+  // === SE QUADRANT: SPECIAL THINGS ===
+  // Staircase climbing east up to a platform
+  { x: 12, y: 0.25, z: 13, w: 2, h: 0.5, d: 3 },
+  { x: 14, y: 0.5,  z: 13, w: 2, h: 1.0, d: 3 },
+  { x: 16, y: 0.75, z: 13, w: 2, h: 1.5, d: 3 },
+  { x: 18, y: 1.0,  z: 13, w: 2, h: 2.0, d: 3 },
+  // Top platform extending east
+  { x: 24, y: 2.0,  z: 13, w: 8, h: 0.3, d: 4 },
+  // Bridge to a second platform
+  { x: 32, y: 2.0,  z: 13, w: 8, h: 0.3, d: 1.5 },
+  { x: 39, y: 2.0,  z: 13, w: 4, h: 0.3, d: 4 },
 
-  // === SCATTERED SMALL COVER ===
-  { x: -5, y: 0.5, z: -5, w: 1.5, h: 1, d: 1.5 },
-  { x: 5, y: 0.5, z: -5, w: 1.5, h: 1, d: 1.5 },
-  { x: -5, y: 0.5, z: 5, w: 1.5, h: 1, d: 1.5 },
-  { x: 5, y: 0.5, z: 5, w: 1.5, h: 1, d: 1.5 },
+  // L-shaped wall cover
+  { x: 25, y: 1.5,  z: 30, w: 14, h: 3, d: 1 },
+  { x: 32, y: 1.5,  z: 35, w: 1, h: 3, d: 10 },
 
-  // === SNIPER PERCHES (tall thin pillars) ===
-  { x: -15, y: 1.5, z: 0, w: 2, h: 3, d: 2 },
-  { x: 15, y: 1.5, z: 0, w: 2, h: 3, d: 2 },
-  { x: 0, y: 1.5, z: -15, w: 2, h: 3, d: 2 },
-  { x: 0, y: 1.5, z: 15, w: 2, h: 3, d: 2 },
+  // Three pillars of different heights
+  { x: 12, y: 4.0,  z: 35, w: 2.5, h: 8, d: 2.5 }, // tall
+  { x: 18, y: 2.5,  z: 40, w: 2.0, h: 5, d: 2.0 }, // medium
+  { x: 24, y: 1.0,  z: 42, w: 2.0, h: 2, d: 2.0 }, // short
 
-  // === STAIRCASE BLOCKS (step up to higher areas) ===
-  // Steps leading to center from north
-  { x: 0, y: 0.25, z: -5, w: 2, h: 0.5, d: 1 },
-  { x: 0, y: 0.5, z: -4, w: 2, h: 1, d: 1 },
-  // Steps from south
-  { x: 0, y: 0.25, z: 5, w: 2, h: 0.5, d: 1 },
-  { x: 0, y: 0.5, z: 4, w: 2, h: 1, d: 1 },
-
-  // === LOW WALLS (crouch-height, can jump over) ===
-  { x: -10, y: 0.4, z: -4, w: 6, h: 0.8, d: 0.5 },
-  { x: 10, y: 0.4, z: 4, w: 6, h: 0.8, d: 0.5 },
-  { x: -4, y: 0.4, z: 10, w: 0.5, h: 0.8, d: 6 },
-  { x: 4, y: 0.4, z: -10, w: 0.5, h: 0.8, d: 6 },
+  // Floating arch / sniper perch
+  { x: 18, y: 5.0,  z: 25, w: 6, h: 0.4, d: 3 },
 ];
 
 const spawnPoints = [
+  // NW (tall tower) — keep clear of the tower at (-25,-25)
   { x: -40, z: -40 },
-  { x: 40, z: -40 },
+  { x: -10, z: -40 },
+  { x: -40, z: -10 },
+  // NE (short towers) — between the pillar grid
+  { x: 6,   z: -6 },
+  { x: 32,  z: -6 },
+  { x: 44,  z: -32 },
+  // SW (blank) — anywhere
   { x: -40, z: 40 },
-  { x: 40, z: 40 },
-  { x: 0, z: -40 },
-  { x: 0, z: 40 },
-  { x: -40, z: 0 },
-  { x: 40, z: 0 },
-  { x: -25, z: -25 },
-  { x: 25, z: 25 },
+  { x: -10, z: 40 },
+  { x: -40, z: 10 },
+  // SE (specials)
+  { x: 6,   z: 6 },
+  { x: 44,  z: 44 },
+  { x: 6,   z: 44 },
 ];
 
 function getSpawnPoint() {
@@ -224,9 +207,15 @@ let activePotion = null;
 const POTION_RESPAWN_TIME = 15000; // 15 seconds after pickup
 const POTION_PICKUP_RADIUS = 1.5;
 const potionLocations = [
-  { x: 0, z: 0 }, { x: -10, z: -10 }, { x: 10, z: 10 },
-  { x: -10, z: 10 }, { x: 10, z: -10 }, { x: 0, z: -12 },
-  { x: 0, z: 12 }, { x: -15, z: 0 }, { x: 15, z: 0 },
+  { x: 0,   z: 0 },     // dead center
+  { x: -10, z: -40 },   // NW (away from tall tower)
+  { x: -40, z: -15 },   // NW
+  { x: 6,   z: -25 },   // NE (in lanes between towers)
+  { x: 44,  z: -18 },   // NE
+  { x: -25, z: 25 },    // SW (open)
+  { x: -10, z: 40 },    // SW
+  { x: 25,  z: 6 },     // SE (near platforms)
+  { x: 6,   z: 35 },    // SE
 ];
 
 function spawnPotion() {
