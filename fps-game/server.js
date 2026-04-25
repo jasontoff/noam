@@ -143,17 +143,10 @@ const obstacles = [
   { x: -25, y: 14, z: -25, w: 6, h: 28, d: 6, theme: 'tower-tall' },
   // Spiral staircase obstacles are pushed below
 
-  // === NE QUADRANT: MANY SHORT TOWERS (jumpable from ground) ===
-  // Heights vary 1.0-1.6m so each is a single hop from ground level.
-  { x: 12, y: 0.5,  z: -12, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
-  { x: 25, y: 0.7,  z: -12, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
-  { x: 38, y: 0.5,  z: -12, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
-  { x: 12, y: 0.7,  z: -25, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
-  { x: 25, y: 0.6,  z: -25, w: 3, h: 1.2, d: 3, theme: 'tower-short' },
-  { x: 38, y: 0.7,  z: -25, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
-  { x: 12, y: 0.5,  z: -38, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
-  { x: 25, y: 0.7,  z: -38, w: 3, h: 1.4, d: 3, theme: 'tower-short' },
-  { x: 38, y: 0.5,  z: -38, w: 3, h: 1.0, d: 3, theme: 'tower-short' },
+  // === NE QUADRANT: MANY SHORT TOWERS (climb via 2-step ladder) ===
+  // Towers are 4x4 with varied heights 2.0-2.6m. Each has two small
+  // "rung" steps on its west side so the player can hop up.
+  // Tower top reachable from rung 2 with a normal jump (+1.6m).
 
   // === SW QUADRANT: BLANK ===
 
@@ -185,6 +178,17 @@ const obstacles = [
   { x: 14, y: 2.5, z: 25, w: 1, h: 5, d: 3, theme: 'stair-climb' },
   // Floating arch / sniper perch
   { x: 18, y: 5.0, z: 25, w: 6, h: 0.4, d: 3, theme: 'arch' },
+
+  // === LAUNCH PADS — step on to bounce skyward ===
+  // `boost` is the upward velocity the client applies on contact.
+  { x: 6,  y: 0.15, z: 38, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 22 },
+  { x: 40, y: 0.15, z:  8, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 18 },
+  { x: 30, y: 0.15, z: 38, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 26 },
+
+  // === SKY PLATFORMS — reachable from the launch pads above ===
+  { x: 6,  y: 10, z: 33, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
+  { x: 40, y: 7,  z: 13, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
+  { x: 30, y: 14, z: 33, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
 ];
 
 // Spiral staircase wrapping the NW tall tower (1m rise per step).
@@ -229,6 +233,28 @@ const obstacles = [
   });
 })();
 
+// NE quadrant towers + 2-step "ladders"
+(function buildShortTowers() {
+  const positions = [
+    { x: 12, z: -12, h: 2.0 }, { x: 25, z: -12, h: 2.4 }, { x: 38, z: -12, h: 2.0 },
+    { x: 12, z: -25, h: 2.4 }, { x: 25, z: -25, h: 2.6 }, { x: 38, z: -25, h: 2.4 },
+    { x: 12, z: -38, h: 2.0 }, { x: 25, z: -38, h: 2.4 }, { x: 38, z: -38, h: 2.0 },
+  ];
+  for (const t of positions) {
+    // Tower body (4x4 footprint)
+    obstacles.push({ x: t.x, y: t.h / 2, z: t.z, w: 4, h: t.h, d: 4, theme: 'tower-short' });
+    // Two ladder rungs on the west face (climb west -> east onto top)
+    obstacles.push({
+      x: t.x - 2.6, y: 0.3, z: t.z,
+      w: 1.2, h: 0.6, d: 1.5, theme: 'ladder-rung',
+    });
+    obstacles.push({
+      x: t.x - 1.6, y: 0.7, z: t.z,
+      w: 1.2, h: 1.4, d: 1.5, theme: 'ladder-rung',
+    });
+  }
+})();
+
 const spawnPoints = [
   // NW (tall tower) — keep clear of the tower at (-25,-25)
   { x: -40, z: -40 },
@@ -251,31 +277,6 @@ const spawnPoints = [
 function getSpawnPoint() {
   return spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
 }
-
-// Healing potions
-let activePotion = null;
-const POTION_RESPAWN_TIME = 15000; // 15 seconds after pickup
-const POTION_PICKUP_RADIUS = 1.5;
-const potionLocations = [
-  { x: 0,   z: 0 },     // dead center
-  { x: -10, z: -40 },   // NW (away from tall tower)
-  { x: -40, z: -15 },   // NW
-  { x: 6,   z: -25 },   // NE (in lanes between towers)
-  { x: 44,  z: -18 },   // NE
-  { x: -25, z: 25 },    // SW (open)
-  { x: -10, z: 40 },    // SW
-  { x: 25,  z: 6 },     // SE (near platforms)
-  { x: 6,   z: 35 },    // SE
-];
-
-function spawnPotion() {
-  const loc = potionLocations[Math.floor(Math.random() * potionLocations.length)];
-  activePotion = { x: loc.x, y: 0.5, z: loc.z, id: Date.now() };
-  io.emit('potionSpawned', activePotion);
-}
-
-// Spawn first potion after 10 seconds
-setTimeout(spawnPotion, 10000);
 
 // Assign colors to players
 const playerColors = [
@@ -327,7 +328,6 @@ io.on('connection', (socket) => {
         character: 'a',
       };
       socket.emit('yourPlayer', players[socket.id]);
-      if (activePotion) socket.emit('potionSpawned', activePotion);
       socket.broadcast.emit('playerJoined', players[socket.id]);
     } else {
       // Returning from pause menu — just update name
@@ -635,13 +635,17 @@ setInterval(() => {
       const dz = b.z - p.z;
       const horizDist = Math.sqrt(dx * dx + dz * dz);
 
-      // Vertical check: player body from feet (y=0) to top of head (y=1.9)
+      // Vertical check: player body from feet to top of head
       const playerFeetY = p.y - PLAYER_HEIGHT;
-      const playerHeadY = p.y + 0.3;
+      const playerHeadY = p.y + 0.4;
       const inVerticalRange = b.y >= playerFeetY && b.y <= playerHeadY;
 
-      if (horizDist < 0.6 && inVerticalRange) {
-        const bulletDamage = b.damage || 20;
+      // Generous horizontal hitbox so hits feel fair
+      if (horizDist < 0.85 && inVerticalRange) {
+        let bulletDamage = b.damage || 20;
+        // Headshot: bullet hit upper portion of body (eye level and above)
+        const isHeadshot = !b.explosive && b.y >= p.y - 0.1;
+        if (isHeadshot) bulletDamage *= 2;
         bullets.splice(i, 1);
         io.emit('bulletRemoved', b.id);
 
@@ -667,7 +671,10 @@ setInterval(() => {
           }
         } else {
           const dealt = applyDamage(p, bulletDamage);
-          io.emit('playerHit', { playerId: id, health: p.health, shooterId: b.ownerId, blocked: dealt === 0 });
+          io.emit('playerHit', {
+            playerId: id, health: p.health, shooterId: b.ownerId,
+            blocked: dealt === 0, headshot: isHeadshot,
+          });
           if (p.health <= 0) {
             handleKill(id, b.ownerId);
           }
@@ -677,36 +684,8 @@ setInterval(() => {
     }
   }
 
-  // Check potion pickup
-  if (activePotion) {
-    for (const id in players) {
-      const p = players[id];
-      if (!p.alive || p.paused) continue;
-      const dx = p.x - activePotion.x;
-      const dz = p.z - activePotion.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < POTION_PICKUP_RADIUS) {
-        p.health = PLAYER_HEALTH;
-        io.emit('potionPickedUp', { playerId: id, potionId: activePotion.id });
-        io.emit('playerHit', { playerId: id, health: p.health, shooterId: null, healed: true });
-        activePotion = null;
-        // Respawn after delay
-        setTimeout(spawnPotion, POTION_RESPAWN_TIME);
-        break;
-      }
-    }
-  }
-
-  // Passive health regen: heal 2 HP per tick if not hit for 5 seconds
-  const REGEN_DELAY = 5000;
-  const REGEN_AMOUNT = 2;
-  for (const id in players) {
-    const p = players[id];
-    if (!p.alive || p.paused) continue;
-    if (p.health < PLAYER_HEALTH && (!p.lastHitTime || now - p.lastHitTime > REGEN_DELAY)) {
-      p.health = Math.min(PLAYER_HEALTH, p.health + REGEN_AMOUNT);
-    }
-  }
+  // (Health potions and passive regen intentionally removed —
+  //  damage is permanent unless you use the Heal special ability.)
 
   // Broadcast game state
   io.emit('gameState', { players });
