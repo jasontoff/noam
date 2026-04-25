@@ -471,40 +471,37 @@ function init() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  // Cap pixel ratio — high-DPI screens otherwise render 4x as many pixels
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // PCFShadowMap is much cheaper than PCFSoftShadowMap; quality drop is
+  // barely noticeable in a fast-paced FPS.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   document.body.appendChild(renderer.domElement);
 
-  // Lighting — bright, daylit playground feel
-  const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+  // Lighting — bright, daylit playground feel.
+  // Ambient + Hemisphere give the colourful playground look without the cost
+  // of multiple coloured PointLights per quadrant.
+  const ambient = new THREE.AmbientLight(0xffffff, 0.75);
   scene.add(ambient);
-  const hemi = new THREE.HemisphereLight(0xb6e3ff, 0x6dc06b, 0.55);
+  const hemi = new THREE.HemisphereLight(0xb6e3ff, 0x6dc06b, 0.6);
   scene.add(hemi);
 
   const dirLight = new THREE.DirectionalLight(0xfff4c4, 1.0);
   dirLight.position.set(10, 20, 10);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.mapSize.width = 1024;
+  dirLight.shadow.mapSize.height = 1024;
   dirLight.shadow.camera.near = 0.5;
-  dirLight.shadow.camera.far = 160;
-  dirLight.shadow.camera.left = -60;
-  dirLight.shadow.camera.right = 60;
-  dirLight.shadow.camera.top = 60;
-  dirLight.shadow.camera.bottom = -60;
+  dirLight.shadow.camera.far = 120;
+  dirLight.shadow.camera.left = -50;
+  dirLight.shadow.camera.right = 50;
+  dirLight.shadow.camera.top = 50;
+  dirLight.shadow.camera.bottom = -50;
   scene.add(dirLight);
 
-  // Point lights for atmosphere — one per quadrant
-  const colors = [0xff4444, 0x44ff44, 0x4444ff, 0xffff44];
-  const positions = [[-25, 8, -25], [25, 8, -25], [-25, 8, 25], [25, 8, 25]];
-  positions.forEach((pos, i) => {
-    const light = new THREE.PointLight(colors[i], 0.7, 50);
-    light.position.set(...pos);
-    scene.add(light);
-  });
-
-  // Ground — bright playground grass
-  const groundGeo = new THREE.PlaneGeometry(100, 100, 100, 100);
+  // Ground — bright playground grass (1x1 segments; flat plane needs no tessellation)
+  const groundGeo = new THREE.PlaneGeometry(100, 100, 1, 1);
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x6dc06b,
     roughness: 0.95,
@@ -985,11 +982,9 @@ function shoot() {
     const soundMap = { shotgun: 'shotgun_shot', sniper: 'sniper_shot', minigun: 'minigun', rocket: 'explosion' };
     playSound(soundMap[selectedWeapon] || 'shoot');
 
-    // Muzzle flash effect
-    const flash = new THREE.PointLight(0xffaa00, 3, 5);
-    flash.position.copy(camera.position);
-    scene.add(flash);
-    setTimeout(() => scene.remove(flash), 50);
+    // (No PointLight muzzle flash — changing scene light count forces
+    //  Three.js to recompile every material every shot, which is brutal
+    //  on minigun auto-fire. The bullet trails + sound cover the feel.)
 
     socket.emit('shoot', {
       x: camera.position.x,
@@ -1051,16 +1046,14 @@ function createObstacles(obstacleData) {
     const mat = new THREE.MeshStandardMaterial(matSpec);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(obs.x, obs.y, obs.z);
-    mesh.castShadow = true;
+    // Only big obstacles cast shadows — the spiral steps, stair-climbs, and
+    // small cover would otherwise add ~50 shadow draws per frame for very
+    // little visual gain.
+    const big = obs.h >= 4 || obs.w >= 5 || obs.d >= 5;
+    mesh.castShadow = big;
     mesh.receiveShadow = true;
     scene.add(mesh);
     obstacleMeshes.push(mesh);
-
-    // Edge wireframe in soft white to enhance the playground look
-    const edges = new THREE.EdgesGeometry(geo);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 }));
-    line.position.copy(mesh.position);
-    scene.add(line);
   });
 }
 
@@ -1310,16 +1303,12 @@ function createBulletMesh(bullet) {
   const size = bullet.size || 0.08;
   const geo = new THREE.SphereGeometry(size, 6, 6);
   const color = bullet.color || 0xffff00;
-  const mat = new THREE.MeshBasicMaterial({ color, emissive: color });
+  // Unlit emissive look — no PointLight per bullet (changing light count
+  // forces Three.js to recompile every material's shader, which causes big
+  // stutters when many bullets are in flight, e.g. minigun auto-fire).
+  const mat = new THREE.MeshBasicMaterial({ color });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(bullet.x, bullet.y, bullet.z);
-
-  // Bullet trail light - bigger for rockets
-  const lightIntensity = bullet.weaponType === 'rocket' ? 1.5 : 0.5;
-  const lightDist = bullet.weaponType === 'rocket' ? 6 : 3;
-  const light = new THREE.PointLight(color, lightIntensity, lightDist);
-  mesh.add(light);
-
   scene.add(mesh);
   return mesh;
 }
