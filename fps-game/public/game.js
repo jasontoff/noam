@@ -1773,7 +1773,7 @@ socket.on('init', (data) => {
   abilities = data.abilities || {};
 
   // Version check
-  const CLIENT_VERSION = '1.0.0';
+  const CLIENT_VERSION = '1.0.1';
   const versionDisplay = document.getElementById('version-display');
   const updateBanner = document.getElementById('update-banner');
   versionDisplay.textContent = 'v' + CLIENT_VERSION;
