@@ -57,6 +57,13 @@ let bulletMeshes = {};
 let obstacles = [];
 let obstacleMeshes = [];
 
+// Cars (only populated on the road map)
+const carMeshes = {};
+let carsState = {};
+
+// Round timer
+let roundEndTime = 0;
+
 // Controls
 let moveForward = false, moveBackward = false;
 let moveLeft = false, moveRight = false;
@@ -460,32 +467,30 @@ function updateWeaponHUD() {
 //  INITIALIZATION
 // ============================================
 
+// Container for all map-specific meshes (ground, decorations, obstacles).
+// Replaced wholesale on map change by applyMapTheme().
+let mapRoot = null;
+let mapInfo = null;
+let hemiLight = null;
+
 function init() {
   scene = new THREE.Scene();
-  // Bright cheerful playground sky
-  scene.background = new THREE.Color(0x87ceeb);
-  scene.fog = new THREE.Fog(0xc8e7ff, 60, 140);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
   camera.position.set(0, PLAYER_HEIGHT, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  // Cap pixel ratio — high-DPI screens otherwise render 4x as many pixels
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.shadowMap.enabled = true;
-  // PCFShadowMap is much cheaper than PCFSoftShadowMap; quality drop is
-  // barely noticeable in a fast-paced FPS.
   renderer.shadowMap.type = THREE.PCFShadowMap;
   document.body.appendChild(renderer.domElement);
 
-  // Lighting — bright, daylit playground feel.
-  // Ambient + Hemisphere give the colourful playground look without the cost
-  // of multiple coloured PointLights per quadrant.
+  // Lighting (constant across maps; hemi colours are tuned per-theme)
   const ambient = new THREE.AmbientLight(0xffffff, 0.75);
   scene.add(ambient);
-  const hemi = new THREE.HemisphereLight(0xb6e3ff, 0x6dc06b, 0.6);
-  scene.add(hemi);
+  hemiLight = new THREE.HemisphereLight(0xb6e3ff, 0x6dc06b, 0.6);
+  scene.add(hemiLight);
 
   const dirLight = new THREE.DirectionalLight(0xfff4c4, 1.0);
   dirLight.position.set(10, 20, 10);
@@ -500,26 +505,75 @@ function init() {
   dirLight.shadow.camera.bottom = -50;
   scene.add(dirLight);
 
-  // Ground — bright playground grass (1x1 segments; flat plane needs no tessellation)
-  const groundGeo = new THREE.PlaneGeometry(100, 100, 1, 1);
-  const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x6dc06b,
-    roughness: 0.95,
-    metalness: 0.0,
+  // Default sky/fog before init data arrives — overwritten by applyMapTheme()
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0xc8e7ff, 60, 140);
+
+  setupControls();
+  createFPWeapon();
+  window.addEventListener('resize', onResize);
+}
+
+// Recursively dispose geometries & materials on a Three.js subtree
+function disposeTree(obj) {
+  obj.traverse((node) => {
+    if (node.geometry) node.geometry.dispose();
+    if (node.material) {
+      const mats = Array.isArray(node.material) ? node.material : [node.material];
+      for (const m of mats) m.dispose();
+    }
   });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
+}
+
+// Apply a map's theme: rebuild ground, sky, fog, hemi tint, decorations.
+// `obstacleData` is the obstacle list from the server (added inside mapRoot).
+function loadMap(info, obstacleData) {
+  mapInfo = info;
+
+  // Tear down previous map (ground + decorations + obstacles)
+  if (mapRoot) {
+    scene.remove(mapRoot);
+    disposeTree(mapRoot);
+  }
+  mapRoot = new THREE.Group();
+  scene.add(mapRoot);
+  obstacleMeshes = [];
+
+  // Sky + fog + hemisphere light
+  scene.background = new THREE.Color(info.sky);
+  scene.fog = new THREE.Fog(info.fog.color, info.fog.near, info.fog.far);
+  if (hemiLight) {
+    hemiLight.color.setHex(info.hemiSky);
+    hemiLight.groundColor.setHex(info.hemiGround);
+  }
+
+  // Ground plane
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(100, 100, 1, 1),
+    new THREE.MeshStandardMaterial({ color: info.ground.color, roughness: 0.95 })
+  );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
-  scene.add(ground);
+  mapRoot.add(ground);
 
-  // Quadrant ground tints (each 50x50 corner gets a pastel colour patch)
-  const quadrantTints = [
-    { x: -25, z: -25, color: 0xffd1dc }, // NW pink
-    { x:  25, z: -25, color: 0xfff4a3 }, // NE yellow
-    { x: -25, z:  25, color: 0xb6e3ff }, // SW sky blue
-    { x:  25, z:  25, color: 0xd9b6ff }, // SE lavender
+  // Theme-specific extras
+  if (info.theme === 'playground') addPlaygroundExtras();
+  else if (info.theme === 'boat')   addBoatExtras();
+  else if (info.theme === 'road')   addRoadExtras();
+
+  // Build obstacle meshes
+  createObstacles(obstacleData);
+}
+
+function addPlaygroundExtras() {
+  // Quadrant pastel tints
+  const tints = [
+    { x: -25, z: -25, color: 0xffd1dc },
+    { x:  25, z: -25, color: 0xfff4a3 },
+    { x: -25, z:  25, color: 0xb6e3ff },
+    { x:  25, z:  25, color: 0xd9b6ff },
   ];
-  quadrantTints.forEach(t => {
+  for (const t of tints) {
     const patch = new THREE.Mesh(
       new THREE.PlaneGeometry(48, 48),
       new THREE.MeshStandardMaterial({ color: t.color, roughness: 1, transparent: true, opacity: 0.55 })
@@ -527,26 +581,84 @@ function init() {
     patch.rotation.x = -Math.PI / 2;
     patch.position.set(t.x, 0.02, t.z);
     patch.receiveShadow = true;
-    scene.add(patch);
-  });
-
-  // Grid overlay on ground (bright, for playground feel)
-  const gridHelper = new THREE.GridHelper(100, 50, 0xffffff, 0xeeeeee);
-  gridHelper.position.y = 0.03;
-  gridHelper.material.transparent = true;
-  gridHelper.material.opacity = 0.35;
-  scene.add(gridHelper);
-
-  // Decorative balloons floating above each quadrant
-  addPlaygroundDecorations();
-
-  setupControls();
-  createFPWeapon();
-  window.addEventListener('resize', onResize);
+    mapRoot.add(patch);
+  }
+  // Bright grid overlay
+  const grid = new THREE.GridHelper(100, 50, 0xffffff, 0xeeeeee);
+  grid.position.y = 0.03;
+  grid.material.transparent = true;
+  grid.material.opacity = 0.35;
+  mapRoot.add(grid);
+  // Clouds, balloons, flag, party hats — see addPlaygroundDecorations
+  addPlaygroundDecorations(mapRoot);
 }
 
-// Purely decorative playground props (no collision)
+function addBoatExtras() {
+  // Wide ocean plane visible past the railings
+  const ocean = new THREE.Mesh(
+    new THREE.PlaneGeometry(800, 800, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x1f5d8a, roughness: 0.4, metalness: 0.4 })
+  );
+  ocean.rotation.x = -Math.PI / 2;
+  ocean.position.y = -0.2;
+  mapRoot.add(ocean);
+
+  // Small wave ripple meshes for ambience (a few rings)
+  for (let i = 0; i < 16; i++) {
+    const r = 60 + i * 12;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r, r + 0.4, 64),
+      new THREE.MeshBasicMaterial({ color: 0x6db8d8, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = -0.18;
+    mapRoot.add(ring);
+  }
+
+  // A faint distant sun ball low on the horizon
+  const sun = new THREE.Mesh(
+    new THREE.SphereGeometry(8, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffe4a8 })
+  );
+  sun.position.set(140, 20, -180);
+  mapRoot.add(sun);
+}
+
+function addRoadExtras() {
+  // Sidewalks already exist as obstacles; add ambient props.
+  // Distant city silhouette: a few large dark boxes far behind the walls.
+  for (let i = -1; i <= 1; i++) {
+    const tower = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 40 + Math.random() * 30, 8),
+      new THREE.MeshStandardMaterial({ color: 0x1c1c2a, emissive: 0x442266, emissiveIntensity: 0.25 })
+    );
+    tower.position.set(i * 35, 15, -90);
+    mapRoot.add(tower);
+    const tower2 = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 35 + Math.random() * 25, 8),
+      new THREE.MeshStandardMaterial({ color: 0x1c1c2a, emissive: 0x665533, emissiveIntensity: 0.2 })
+    );
+    tower2.position.set(i * 35, 15, 90);
+    mapRoot.add(tower2);
+  }
+
+  // Twinkly emissive specks in the sky for a sunset feel
+  const dustGeo = new THREE.SphereGeometry(0.5, 6, 6);
+  const dustMat = new THREE.MeshBasicMaterial({ color: 0xfff5d0 });
+  for (let i = 0; i < 30; i++) {
+    const d = new THREE.Mesh(dustGeo, dustMat);
+    d.position.set(
+      (Math.random() - 0.5) * 180,
+      30 + Math.random() * 40,
+      (Math.random() - 0.5) * 180
+    );
+    mapRoot.add(d);
+  }
+}
+
+// Purely decorative playground props (no collision). Adds to mapRoot.
 function addPlaygroundDecorations() {
+  const parent = mapRoot;
   // Fluffy clouds scattered above the map
   const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const cloudSpots = [
@@ -563,7 +675,7 @@ function addPlaygroundDecorations() {
       cloud.add(puff);
     }
     cloud.position.set(cx, cy, cz);
-    scene.add(cloud);
+    parent.add(cloud);
   });
 
   // Balloon clusters tethered above each quadrant
@@ -590,14 +702,14 @@ function addPlaygroundDecorations() {
       const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 12), balloonMat);
       balloon.scale.y = 1.3;
       balloon.position.set(bx, by, bz);
-      scene.add(balloon);
+      parent.add(balloon);
       // String down to anchor
       const stringMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
       const stringGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(bx, by - 0.7, bz),
         new THREE.Vector3(a.x, a.h - 1.5, a.z),
       ]);
-      scene.add(new THREE.Line(stringGeo, stringMat));
+      parent.add(new THREE.Line(stringGeo, stringMat));
     }
   });
 
@@ -605,11 +717,11 @@ function addPlaygroundDecorations() {
   const poleMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.4, metalness: 0.7 });
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 5, 8), poleMat);
   pole.position.set(-25, 30.5, -25);
-  scene.add(pole);
+  parent.add(pole);
   const flagMat = new THREE.MeshStandardMaterial({ color: 0xff3366, side: THREE.DoubleSide, roughness: 0.6 });
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(2, 1.2), flagMat);
   flag.position.set(-23.9, 32.2, -25);
-  scene.add(flag);
+  parent.add(flag);
 
   // Party-hat cones on top of each NE short tower (purely decorative)
   const hatColors = [0xff5577, 0x55c2ff, 0xffd244, 0xb16bff, 0x77e07a, 0xff944d, 0xff5577, 0x55c2ff, 0xffd244];
@@ -624,7 +736,7 @@ function addPlaygroundDecorations() {
         ? (tx === 25 && tz === -25 ? 1.2 : 1.4)
         : 1.0;
       hat.position.set(tx, top + 0.7, tz);
-      scene.add(hat);
+      parent.add(hat);
       hatIdx++;
     }
   }
@@ -1021,6 +1133,22 @@ function createObstacles(obstacleData) {
     'ladder-rung':  { color: 0xfff7d4, roughness: 0.6, metalness: 0.05 },
     'launch-pad':   { color: 0xff5b1a, roughness: 0.3, metalness: 0.4, emissive: 0xff3300, emissiveIntensity: 0.9 },
     'sky-platform': { color: 0xb6e3ff, roughness: 0.4, metalness: 0.3, emissive: 0x224466, emissiveIntensity: 0.4 },
+    // Boat
+    'railing':          { color: 0x6a3f1f, roughness: 0.85, metalness: 0.05 },
+    'mast':             { color: 0x4a2a14, roughness: 0.9,  metalness: 0.05 },
+    'crow-nest':        { color: 0x8a5530, roughness: 0.7,  metalness: 0.1  },
+    'cabin':            { color: 0x7a4a25, roughness: 0.8,  metalness: 0.05 },
+    'cabin-roof-edge':  { color: 0x5a341d, roughness: 0.85, metalness: 0.05 },
+    'crate':            { color: 0xa8743b, roughness: 0.9,  metalness: 0.0  },
+    'barrel':           { color: 0x6e3f1d, roughness: 0.7,  metalness: 0.2  },
+    // Road
+    'sidewalk':  { color: 0x9a9aa8, roughness: 0.95, metalness: 0.0 },
+    'barrier':   { color: 0xc8c8d0, roughness: 0.85, metalness: 0.05 },
+    'lane-mark': { color: 0xffffaa, roughness: 0.6,  metalness: 0.0, emissive: 0xffff66, emissiveIntensity: 0.4 },
+    'building':  { color: 0x33334a, roughness: 0.9,  metalness: 0.1, emissive: 0x442266, emissiveIntensity: 0.3 },
+    'lamp':      { color: 0x8a8a96, roughness: 0.4,  metalness: 0.6 },
+    'wreck':     { color: 0x5a3a3a, roughness: 0.85, metalness: 0.4 },
+    'pillar':    { color: 0x4a4a55, roughness: 0.85, metalness: 0.1 },
   };
   const cycleShortTower = [0xff5b4a, 0x4ed16b, 0xffe14d, 0x4ec0ff, 0xff67e1, 0x9a5cff, 0xffaf3a, 0x4ed16b, 0xff5b4a];
   const cycleStair      = [0xffe14d, 0x4ec0ff]; // alternating yellow / blue
@@ -1055,9 +1183,52 @@ function createObstacles(obstacleData) {
     const big = obs.h >= 4 || obs.w >= 5 || obs.d >= 5;
     mesh.castShadow = big;
     mesh.receiveShadow = true;
-    scene.add(mesh);
+    (mapRoot || scene).add(mesh);
     obstacleMeshes.push(mesh);
   });
+}
+
+// Build (or update) a car mesh from a server car snapshot.
+// Cars are colourful boxes with a darker top "cabin" and 4 wheel boxes.
+function ensureCarMesh(car) {
+  let group = carMeshes[car.id];
+  if (!group) {
+    group = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: car.color || 0xff4040, roughness: 0.5, metalness: 0.4,
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(car.w, car.h, car.d), bodyMat);
+    group.add(body);
+    const cabin = new THREE.Mesh(
+      new THREE.BoxGeometry(car.w * 0.85, car.h * 0.55, car.d * 0.55),
+      new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.3, metalness: 0.6 })
+    );
+    cabin.position.set(0, car.h * 0.55, -car.d * 0.05);
+    group.add(cabin);
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+    for (const wx of [-car.w / 2, car.w / 2]) {
+      for (const wz of [-car.d / 2 + 0.6, car.d / 2 - 0.6]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 12), wheelMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, -car.h / 2, wz);
+        group.add(wheel);
+      }
+    }
+    // Headlights — emissive boxes on the front
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffcc });
+    for (const dx of [-car.w / 2 + 0.3, car.w / 2 - 0.3]) {
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.1), lightMat);
+      lamp.position.set(dx, 0, -car.d / 2 - 0.05);
+      group.add(lamp);
+    }
+    group.userData.dz = car.dz;
+    if (mapRoot) mapRoot.add(group);
+    carMeshes[car.id] = group;
+  }
+  group.position.set(car.x, car.y, car.z);
+  // Cars driving the other way are flipped 180° around y
+  group.rotation.y = car.dz < 0 ? Math.PI : 0;
+  return group;
 }
 
 // ============================================
@@ -1529,6 +1700,40 @@ function updateScoreboard() {
 }
 
 // ============================================
+//  ROUND HUD + WINNER BANNER
+// ============================================
+
+const roundMapEl   = document.getElementById('round-map');
+const roundTimeEl  = document.getElementById('round-time');
+const roundBanner  = document.getElementById('round-banner');
+const roundBannerWinner = document.getElementById('round-banner-winner');
+const roundBannerNext   = document.getElementById('round-banner-next');
+
+function updateRoundHUD() {
+  if (!roundMapEl) return;
+  if (mapInfo) roundMapEl.textContent = mapInfo.name || '';
+  if (roundEndTime) {
+    const ms = Math.max(0, roundEndTime - Date.now());
+    const total = Math.floor(ms / 1000);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    roundTimeEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  } else {
+    roundTimeEl.textContent = '';
+  }
+}
+
+function showRoundBanner(winnerName, topKills, nextMapName) {
+  if (!roundBanner) return;
+  roundBannerWinner.textContent = winnerName
+    ? `Winner: ${winnerName} (${topKills} kills)`
+    : 'No kills this round';
+  roundBannerNext.textContent = `Next map: ${nextMapName || ''}`;
+  roundBanner.style.display = 'block';
+  setTimeout(() => { roundBanner.style.display = 'none'; }, 6000);
+}
+
+// ============================================
 //  KILL FEED
 // ============================================
 
@@ -1727,6 +1932,7 @@ function animate() {
   updateAbilityHUD();
   drawMinimap();
   updateScoreboard();
+  updateRoundHUD();
 
   // Animate first-person weapon
   if (fpWeaponGroup) {
@@ -1783,7 +1989,23 @@ socket.on('init', (data) => {
   }
 
   init();
-  createObstacles(data.obstacles);
+  if (data.map) {
+    loadMap(data.map, data.obstacles);
+  } else {
+    // Server didn't send map info — fall back to playground theme
+    loadMap({
+      id: 'playground', name: 'Playground', theme: 'playground',
+      sky: 0x87ceeb, fog: { color: 0xc8e7ff, near: 60, far: 140 },
+      ground: { color: 0x6dc06b }, hemiSky: 0xb6e3ff, hemiGround: 0x6dc06b,
+    }, data.obstacles);
+  }
+  if (typeof data.roundEndTime === 'number') {
+    roundEndTime = data.roundEndTime;
+  }
+  // Seed any cars sent at init time
+  if (Array.isArray(data.cars)) {
+    for (const c of data.cars) ensureCarMesh(c);
+  }
   updateWeaponHUD();
   updateAbilityHUD();
 
@@ -1801,6 +2023,34 @@ socket.on('init', (data) => {
   }
 
   animate();
+});
+
+socket.on('mapChanged', (data) => {
+  // Tear down any car meshes from the previous round
+  for (const id in carMeshes) {
+    mapRoot && mapRoot.remove(carMeshes[id]);
+    delete carMeshes[id];
+  }
+
+  loadMap(data.map, data.obstacles);
+  if (typeof data.roundEndTime === 'number') roundEndTime = data.roundEndTime;
+  // Refresh player snapshots from the server (positions reset to spawns)
+  if (data.players) players = data.players;
+
+  // Seed cars for the new map (if any)
+  if (Array.isArray(data.cars)) {
+    for (const c of data.cars) ensureCarMesh(c);
+  }
+
+  // Snap our local camera to the server-side spawn and zero velocity
+  const me = players[myId];
+  if (me) {
+    camera.position.set(me.x, me.y, me.z);
+    velocity.set(0, 0, 0);
+  }
+
+  // Show round-over banner
+  showRoundBanner(data.winnerName, data.topKills, data.map.name);
 });
 
 socket.on('yourPlayer', (player) => {
@@ -1874,6 +2124,23 @@ socket.on('gameState', (state) => {
     }
   }
 
+  // Sync cars from server snapshot (road map only)
+  if (Array.isArray(state.cars)) {
+    const seen = new Set();
+    for (const car of state.cars) {
+      seen.add(car.id);
+      ensureCarMesh(car);
+    }
+    // Despawn locally any car the server no longer reports
+    for (const id in carMeshes) {
+      if (!seen.has(id)) {
+        if (mapRoot) mapRoot.remove(carMeshes[id]);
+        disposeTree(carMeshes[id]);
+        delete carMeshes[id];
+      }
+    }
+  }
+
   // Update own health display
   const me = players[myId];
   if (me) {
@@ -1883,6 +2150,15 @@ socket.on('gameState', (state) => {
     if (hp > 60) healthFill.style.backgroundColor = '#0f0';
     else if (hp > 30) healthFill.style.backgroundColor = '#ff0';
     else healthFill.style.backgroundColor = '#f00';
+  }
+});
+
+socket.on('carSpawned', (car) => { ensureCarMesh(car); });
+socket.on('carRemoved', (id) => {
+  if (carMeshes[id]) {
+    if (mapRoot) mapRoot.remove(carMeshes[id]);
+    disposeTree(carMeshes[id]);
+    delete carMeshes[id];
   }
 });
 

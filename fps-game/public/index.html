@@ -225,6 +225,20 @@
 
 <div id="minimap"><canvas id="minimap-canvas" width="150" height="150"></canvas></div>
 
+<div id="round-hud" style="position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:50;
+   font-family:'Courier New',monospace; color:#fff; text-shadow:0 0 6px #000; pointer-events:none; text-align:center;">
+  <div id="round-map" style="font-size:14px; opacity:0.85;"></div>
+  <div id="round-time" style="font-size:22px; font-weight:bold; letter-spacing:2px;"></div>
+</div>
+
+<div id="round-banner" style="display:none; position:fixed; top:30%; left:50%; transform:translate(-50%,-50%); z-index:120;
+   background:rgba(0,0,0,0.78); border:2px solid #ffd200; border-radius:14px; padding:24px 36px; text-align:center;
+   font-family:'Courier New',monospace; pointer-events:none;">
+  <div id="round-banner-title" style="color:#ffd200; font-size:30px; font-weight:bold;">ROUND OVER</div>
+  <div id="round-banner-winner" style="color:#fff; font-size:18px; margin-top:8px;"></div>
+  <div id="round-banner-next" style="color:#9cf; font-size:18px; margin-top:6px;"></div>
+</div>
+
 <div id="version-display" style="position:fixed; bottom:5px; right:160px; z-index:50; color:#444; font-size:11px; font-family:'Courier New',monospace;"></div>
 
 <div id="update-banner" style="display:none; position:fixed; top:0; left:0; width:100%; z-index:200;

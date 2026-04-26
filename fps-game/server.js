@@ -125,157 +125,389 @@ const ABILITIES = {
   },
 };
 
-// Map obstacles (boxes) - {x, y, z, w, h, d, theme}
-// Map is 100x100, split into four 50x50 quadrants by themes:
-//   NW (-x,-z): one very tall climbable tower
-//   NE (+x,-z): many short towers (jumpable from ground)
-//   SW (-x,+z): blank
-//   SE (+x,+z): special things (stairs, platforms, bridge, pillars, arch, walls)
-const obstacles = [
-  // === OUTER WALLS ===
-  { x: 0, y: 3, z: -50, w: 100, h: 6, d: 1, theme: 'wall' },
-  { x: 0, y: 3, z: 50, w: 100, h: 6, d: 1, theme: 'wall' },
-  { x: -50, y: 3, z: 0, w: 1, h: 6, d: 100, theme: 'wall' },
-  { x: 50, y: 3, z: 0, w: 1, h: 6, d: 100, theme: 'wall' },
+// ============================================================================
+//  MAPS
+// ============================================================================
+// Each map is { name, theme, sky, fog, ground, hasCars?, builder() }.
+// builder() returns { obstacles, spawnPoints }. Round rotation calls builder
+// fresh every time so anything procedural rebuilds cleanly.
 
-  // === NW QUADRANT: ONE VERY TALL CLIMBABLE TOWER ===
-  // Body: 6x6 footprint, top at y=28
-  { x: -25, y: 14, z: -25, w: 6, h: 28, d: 6, theme: 'tower-tall' },
-  // Spiral staircase obstacles are pushed below
+function buildPlaygroundMap() {
+  const obstacles = [
+    // Outer walls
+    { x: 0,   y: 3, z: -50, w: 100, h: 6, d: 1,   theme: 'wall' },
+    { x: 0,   y: 3, z:  50, w: 100, h: 6, d: 1,   theme: 'wall' },
+    { x: -50, y: 3, z:   0, w: 1,   h: 6, d: 100, theme: 'wall' },
+    { x:  50, y: 3, z:   0, w: 1,   h: 6, d: 100, theme: 'wall' },
 
-  // === NE QUADRANT: MANY SHORT TOWERS (climb via 2-step ladder) ===
-  // Towers are 4x4 with varied heights 2.0-2.6m. Each has two small
-  // "rung" steps on its west side so the player can hop up.
-  // Tower top reachable from rung 2 with a normal jump (+1.6m).
+    // NW: one very tall climbable tower (spiral added below)
+    { x: -25, y: 14, z: -25, w: 6, h: 28, d: 6, theme: 'tower-tall' },
 
-  // === SW QUADRANT: BLANK ===
+    // SE: stairs up to a platform, bridge to a second platform
+    { x: 12, y: 0.25, z: 13, w: 2, h: 0.5, d: 3, theme: 'stair-climb' },
+    { x: 14, y: 0.5,  z: 13, w: 2, h: 1.0, d: 3, theme: 'stair-climb' },
+    { x: 16, y: 0.75, z: 13, w: 2, h: 1.5, d: 3, theme: 'stair-climb' },
+    { x: 18, y: 1.0,  z: 13, w: 2, h: 2.0, d: 3, theme: 'stair-climb' },
+    { x: 24, y: 2.0,  z: 13, w: 8, h: 0.3, d: 4, theme: 'platform' },
+    { x: 32, y: 2.0,  z: 13, w: 8, h: 0.3, d: 1.5, theme: 'bridge' },
+    { x: 39, y: 2.0,  z: 13, w: 4, h: 0.3, d: 4, theme: 'platform' },
 
-  // === SE QUADRANT: SPECIAL THINGS ===
-  // Slide-style staircase up to a platform
-  { x: 12, y: 0.25, z: 13, w: 2, h: 0.5, d: 3, theme: 'stair-climb' },
-  { x: 14, y: 0.5,  z: 13, w: 2, h: 1.0, d: 3, theme: 'stair-climb' },
-  { x: 16, y: 0.75, z: 13, w: 2, h: 1.5, d: 3, theme: 'stair-climb' },
-  { x: 18, y: 1.0,  z: 13, w: 2, h: 2.0, d: 3, theme: 'stair-climb' },
-  // Top platform extending east, then bridge to a second platform
-  { x: 24, y: 2.0,  z: 13, w: 8, h: 0.3, d: 4, theme: 'platform' },
-  { x: 32, y: 2.0,  z: 13, w: 8, h: 0.3, d: 1.5, theme: 'bridge' },
-  { x: 39, y: 2.0,  z: 13, w: 4, h: 0.3, d: 4, theme: 'platform' },
+    // L-shaped wall cover
+    { x: 25, y: 1.5, z: 30, w: 14, h: 3, d: 1,  theme: 'wall-cover' },
+    { x: 32, y: 1.5, z: 35, w: 1,  h: 3, d: 10, theme: 'wall-cover' },
 
-  // L-shaped wall cover
-  { x: 25, y: 1.5,  z: 30, w: 14, h: 3, d: 1, theme: 'wall-cover' },
-  { x: 32, y: 1.5,  z: 35, w: 1, h: 3, d: 10, theme: 'wall-cover' },
+    // Pillars
+    { x: 12, y: 4.0, z: 35, w: 2.5, h: 8, d: 2.5, theme: 'pillar-tall' },
+    { x: 18, y: 2.5, z: 40, w: 2.0, h: 5, d: 2.0, theme: 'pillar-mid' },
+    { x: 24, y: 1.0, z: 42, w: 2.0, h: 2, d: 2.0, theme: 'pillar-short' },
 
-  // Three pillars of different heights
-  { x: 12, y: 4.0,  z: 35, w: 2.5, h: 8, d: 2.5, theme: 'pillar-tall' },
-  { x: 18, y: 2.5,  z: 40, w: 2.0, h: 5, d: 2.0, theme: 'pillar-mid' },
-  { x: 24, y: 1.0,  z: 42, w: 2.0, h: 2, d: 2.0, theme: 'pillar-short' },
+    // Stairs to floating arch
+    { x: 10, y: 0.5, z: 25, w: 1, h: 1, d: 3, theme: 'stair-climb' },
+    { x: 11, y: 1.0, z: 25, w: 1, h: 2, d: 3, theme: 'stair-climb' },
+    { x: 12, y: 1.5, z: 25, w: 1, h: 3, d: 3, theme: 'stair-climb' },
+    { x: 13, y: 2.0, z: 25, w: 1, h: 4, d: 3, theme: 'stair-climb' },
+    { x: 14, y: 2.5, z: 25, w: 1, h: 5, d: 3, theme: 'stair-climb' },
+    { x: 18, y: 5.0, z: 25, w: 6, h: 0.4, d: 3, theme: 'arch' },
 
-  // Stairs leading up to the floating arch
-  { x: 10, y: 0.5, z: 25, w: 1, h: 1, d: 3, theme: 'stair-climb' },
-  { x: 11, y: 1.0, z: 25, w: 1, h: 2, d: 3, theme: 'stair-climb' },
-  { x: 12, y: 1.5, z: 25, w: 1, h: 3, d: 3, theme: 'stair-climb' },
-  { x: 13, y: 2.0, z: 25, w: 1, h: 4, d: 3, theme: 'stair-climb' },
-  { x: 14, y: 2.5, z: 25, w: 1, h: 5, d: 3, theme: 'stair-climb' },
-  // Floating arch / sniper perch
-  { x: 18, y: 5.0, z: 25, w: 6, h: 0.4, d: 3, theme: 'arch' },
+    // Launch pads + sky platforms (SE)
+    { x: 6,  y: 0.15, z: 38, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 22 },
+    { x: 40, y: 0.15, z:  8, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 18 },
+    { x: 30, y: 0.15, z: 38, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 26 },
+    { x: 6,  y: 10,   z: 33, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
+    { x: 40, y: 7,    z: 13, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
+    { x: 30, y: 14,   z: 33, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
+  ];
 
-  // === LAUNCH PADS — step on to bounce skyward ===
-  // `boost` is the upward velocity the client applies on contact.
-  { x: 6,  y: 0.15, z: 38, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 22 },
-  { x: 40, y: 0.15, z:  8, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 18 },
-  { x: 30, y: 0.15, z: 38, w: 3, h: 0.3, d: 3, theme: 'launch-pad', boost: 26 },
-
-  // === SKY PLATFORMS — reachable from the launch pads above ===
-  { x: 6,  y: 10, z: 33, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
-  { x: 40, y: 7,  z: 13, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
-  { x: 30, y: 14, z: 33, w: 5, h: 0.3, d: 5, theme: 'sky-platform' },
-];
-
-// Spiral staircase wrapping the NW tall tower (1m rise per step).
-// The tower is centered at (-25,-25) with a 6x6 footprint (edges at ±3 from center).
-// 28 steps total -> top at y=28 = tower top.
-(function buildTowerSpiral() {
-  const cx = -25, cz = -25, half = 3.0;
-  const stepW = 2.0; // wide enough that adjacent steps overlap at corners
-  for (let i = 0; i < 28; i++) {
-    const top = i + 1;            // top y of this step
-    const sideIdx = Math.floor(i / 7);
-    const k = i % 7;
-    let x, z;
-    if (sideIdx === 0) {
-      // South face, going west
-      x = cx + half - 0.5 - k;    // -22.5 ... -28.5
-      z = cz + half + 1;          // -21
-    } else if (sideIdx === 1) {
-      // West face, going north
-      x = cx - half - 1;          // -29
-      z = cz + half - 0.5 - k;    // -22.5 ... -28.5
-    } else if (sideIdx === 2) {
-      // North face, going east
-      x = cx - half + 0.5 + k;    // -27.5 ... -21.5
-      z = cz - half - 1;          // -29
-    } else {
-      // East face, going south
-      x = cx + half + 1;          // -21
-      z = cz - half + 0.5 + k;    // -27.5 ... -21.5
+  // NW spiral staircase (1m rise per step, wraps the tall tower)
+  {
+    const cx = -25, cz = -25, half = 3.0, stepW = 2.0;
+    for (let i = 0; i < 28; i++) {
+      const top = i + 1;
+      const sideIdx = Math.floor(i / 7);
+      const k = i % 7;
+      let x, z;
+      if (sideIdx === 0)      { x = cx + half - 0.5 - k; z = cz + half + 1; }
+      else if (sideIdx === 1) { x = cx - half - 1;       z = cz + half - 0.5 - k; }
+      else if (sideIdx === 2) { x = cx - half + 0.5 + k; z = cz - half - 1; }
+      else                    { x = cx + half + 1;       z = cz - half + 0.5 + k; }
+      obstacles.push({ x, y: top / 2, z, w: stepW, h: top, d: stepW, theme: 'spiral-step' });
     }
     obstacles.push({
-      x, y: top / 2, z,
-      w: stepW, h: top, d: stepW,
-      theme: 'spiral-step',
+      x: cx + half - 0.5, y: 14, z: cz + half - 0.5,
+      w: 2.0, h: 28, d: 2.0, theme: 'spiral-step',
     });
   }
-  // Final landing block that bridges the last step onto the tower top
-  obstacles.push({
-    x: cx + half - 0.5, y: 14, z: cz + half - 0.5,
-    w: 2.0, h: 28, d: 2.0,
-    theme: 'spiral-step',
-  });
-})();
 
-// NE quadrant towers + 2-step "ladders"
-(function buildShortTowers() {
-  const positions = [
-    { x: 12, z: -12, h: 2.0 }, { x: 25, z: -12, h: 2.4 }, { x: 38, z: -12, h: 2.0 },
-    { x: 12, z: -25, h: 2.4 }, { x: 25, z: -25, h: 2.6 }, { x: 38, z: -25, h: 2.4 },
-    { x: 12, z: -38, h: 2.0 }, { x: 25, z: -38, h: 2.4 }, { x: 38, z: -38, h: 2.0 },
+  // NE 3x3 short towers + 2-rung ladders
+  {
+    const positions = [
+      { x: 12, z: -12, h: 2.0 }, { x: 25, z: -12, h: 2.4 }, { x: 38, z: -12, h: 2.0 },
+      { x: 12, z: -25, h: 2.4 }, { x: 25, z: -25, h: 2.6 }, { x: 38, z: -25, h: 2.4 },
+      { x: 12, z: -38, h: 2.0 }, { x: 25, z: -38, h: 2.4 }, { x: 38, z: -38, h: 2.0 },
+    ];
+    for (const t of positions) {
+      obstacles.push({ x: t.x, y: t.h / 2, z: t.z, w: 4, h: t.h, d: 4, theme: 'tower-short' });
+      obstacles.push({ x: t.x - 2.6, y: 0.3, z: t.z, w: 1.2, h: 0.6, d: 1.5, theme: 'ladder-rung' });
+      obstacles.push({ x: t.x - 1.6, y: 0.7, z: t.z, w: 1.2, h: 1.4, d: 1.5, theme: 'ladder-rung' });
+    }
+  }
+
+  const spawnPoints = [
+    { x: -40, z: -40 }, { x: -10, z: -40 }, { x: -40, z: -10 },
+    { x:   6, z:  -6 }, { x:  32, z:  -6 }, { x:  44, z: -32 },
+    { x: -40, z:  40 }, { x: -10, z:  40 }, { x: -40, z:  10 },
+    { x:   6, z:   6 }, { x:  44, z:  44 }, { x:   6, z:  44 },
   ];
-  for (const t of positions) {
-    // Tower body (4x4 footprint)
-    obstacles.push({ x: t.x, y: t.h / 2, z: t.z, w: 4, h: t.h, d: 4, theme: 'tower-short' });
-    // Two ladder rungs on the west face (climb west -> east onto top)
-    obstacles.push({
-      x: t.x - 2.6, y: 0.3, z: t.z,
-      w: 1.2, h: 0.6, d: 1.5, theme: 'ladder-rung',
-    });
-    obstacles.push({
-      x: t.x - 1.6, y: 0.7, z: t.z,
-      w: 1.2, h: 1.4, d: 1.5, theme: 'ladder-rung',
-    });
-  }
-})();
+  return { obstacles, spawnPoints };
+}
 
-const spawnPoints = [
-  // NW (tall tower) — keep clear of the tower at (-25,-25)
-  { x: -40, z: -40 },
-  { x: -10, z: -40 },
-  { x: -40, z: -10 },
-  // NE (short towers) — between the pillar grid
-  { x: 6,   z: -6 },
-  { x: 32,  z: -6 },
-  { x: 44,  z: -32 },
-  // SW (blank) — anywhere
-  { x: -40, z: 40 },
-  { x: -10, z: 40 },
-  { x: -40, z: 10 },
-  // SE (specials)
-  { x: 6,   z: 6 },
-  { x: 44,  z: 44 },
-  { x: 6,   z: 44 },
-];
+function buildBoatMap() {
+  // 100x100 deck. Outer railings shorter (h=3) so they read as boat railings,
+  // but tall enough to keep players on the deck.
+  const obstacles = [
+    // Outer railings
+    { x: 0,   y: 1.5, z: -50, w: 100, h: 3, d: 1,   theme: 'railing' },
+    { x: 0,   y: 1.5, z:  50, w: 100, h: 3, d: 1,   theme: 'railing' },
+    { x: -50, y: 1.5, z:   0, w: 1,   h: 3, d: 100, theme: 'railing' },
+    { x:  50, y: 1.5, z:   0, w: 1,   h: 3, d: 100, theme: 'railing' },
+
+    // Center mast (tall thin column) + crow's nest platform near the top
+    { x: 0, y: 14, z: 0, w: 1.5, h: 28, d: 1.5, theme: 'mast' },
+    { x: 0, y: 22, z: 0, w: 4,   h: 0.3, d: 4, theme: 'crow-nest' },
+
+    // Two cabins (raised box structures, jumpable on top via small steps)
+    { x: -30, y: 1.5, z: -25, w: 14, h: 3,   d: 12, theme: 'cabin' },
+    { x: -30, y: 3.0, z: -16, w: 6,  h: 0.3, d: 4,  theme: 'cabin-roof-edge' },
+    { x: -36, y: 0.4, z: -16, w: 1,  h: 0.8, d: 2,  theme: 'ladder-rung' }, // step up
+    { x: -34, y: 1.0, z: -16, w: 1,  h: 2.0, d: 2,  theme: 'ladder-rung' }, // step up
+    { x:  30, y: 1.5, z:  25, w: 14, h: 3,   d: 12, theme: 'cabin' },
+    { x:  30, y: 3.0, z:  16, w: 6,  h: 0.3, d: 4,  theme: 'cabin-roof-edge' },
+    { x:  36, y: 0.4, z:  16, w: 1,  h: 0.8, d: 2,  theme: 'ladder-rung' },
+    { x:  34, y: 1.0, z:  16, w: 1,  h: 2.0, d: 2,  theme: 'ladder-rung' },
+
+    // Crates scattered as cover
+    { x: -10, y: 0.6, z: -10, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x:  10, y: 0.6, z: -10, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x: -10, y: 0.6, z:  10, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x:  10, y: 0.6, z:  10, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x: -20, y: 0.6, z:   0, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x:  20, y: 0.6, z:   0, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x:   0, y: 0.6, z: -20, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x:   0, y: 0.6, z:  20, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    // Stacked crates
+    { x:  18, y: 1.8, z: -20, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x:  18, y: 0.6, z: -20, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x: -18, y: 1.8, z:  20, w: 2, h: 1.2, d: 2, theme: 'crate' },
+    { x: -18, y: 0.6, z:  20, w: 2, h: 1.2, d: 2, theme: 'crate' },
+
+    // Barrels (cylinders represented as squat boxes)
+    { x: -25, y: 0.5, z:  10, w: 1.4, h: 1.0, d: 1.4, theme: 'barrel' },
+    { x: -22, y: 0.5, z:  10, w: 1.4, h: 1.0, d: 1.4, theme: 'barrel' },
+    { x:  25, y: 0.5, z: -10, w: 1.4, h: 1.0, d: 1.4, theme: 'barrel' },
+    { x:  22, y: 0.5, z: -10, w: 1.4, h: 1.0, d: 1.4, theme: 'barrel' },
+  ];
+
+  const spawnPoints = [
+    { x: -40, z: -40 }, { x: 40, z: -40 }, { x: -40, z: 40 }, { x: 40, z: 40 },
+    { x: 0,   z: -40 }, { x: 0,  z:  40 }, { x: -40, z:  0 }, { x: 40, z:  0 },
+    { x: -15, z:   5 }, { x: 15, z:  -5 },
+  ];
+  return { obstacles, spawnPoints };
+}
+
+function buildRoadMap() {
+  // Main play area is a highway running north-south.
+  // Center: the road (4 lanes between x=-18..18). Cars drive along z.
+  // East/west of the road: raised sidewalks ("safe" zones, still reachable from road).
+  const obstacles = [
+    // Outer walls
+    { x: 0,   y: 3, z: -50, w: 100, h: 6, d: 1,   theme: 'wall' },
+    { x: 0,   y: 3, z:  50, w: 100, h: 6, d: 1,   theme: 'wall' },
+    { x: -50, y: 3, z:   0, w: 1,   h: 6, d: 100, theme: 'wall' },
+    { x:  50, y: 3, z:   0, w: 1,   h: 6, d: 100, theme: 'wall' },
+
+    // Raised sidewalks on east + west of the road (height 0.5)
+    { x: -34, y: 0.25, z: 0, w: 30, h: 0.5, d: 100, theme: 'sidewalk' },
+    { x:  34, y: 0.25, z: 0, w: 30, h: 0.5, d: 100, theme: 'sidewalk' },
+
+    // Concrete barriers separating road from sidewalk
+    { x: -19, y: 0.6, z: 0, w: 0.5, h: 1.2, d: 100, theme: 'barrier' },
+    { x:  19, y: 0.6, z: 0, w: 0.5, h: 1.2, d: 100, theme: 'barrier' },
+
+    // Lane markings (visual only, very low — players walk over them)
+    { x: -9, y: 0.05, z: 0, w: 0.5, h: 0.1, d: 100, theme: 'lane-mark' },
+    { x:  0, y: 0.05, z: 0, w: 0.5, h: 0.1, d: 100, theme: 'lane-mark' },
+    { x:  9, y: 0.05, z: 0, w: 0.5, h: 0.1, d: 100, theme: 'lane-mark' },
+
+    // Buildings on each sidewalk for cover + parkour
+    { x: -38, y: 4, z: -30, w: 12, h: 8, d: 12, theme: 'building' },
+    { x: -38, y: 4, z:  10, w: 12, h: 8, d: 12, theme: 'building' },
+    { x:  38, y: 4, z: -10, w: 12, h: 8, d: 12, theme: 'building' },
+    { x:  38, y: 4, z:  30, w: 12, h: 8, d: 12, theme: 'building' },
+
+    // Streetlamps (decorative tall thin posts)
+    { x: -22, y: 4, z: -25, w: 0.5, h: 8, d: 0.5, theme: 'lamp' },
+    { x:  22, y: 4, z: -25, w: 0.5, h: 8, d: 0.5, theme: 'lamp' },
+    { x: -22, y: 4, z:  25, w: 0.5, h: 8, d: 0.5, theme: 'lamp' },
+    { x:  22, y: 4, z:  25, w: 0.5, h: 8, d: 0.5, theme: 'lamp' },
+
+    // Stranded/abandoned cars as static cover on the road
+    { x: -10, y: 0.7, z: -38, w: 2.5, h: 1.4, d: 4.5, theme: 'wreck' },
+    { x:  10, y: 0.7, z:  38, w: 2.5, h: 1.4, d: 4.5, theme: 'wreck' },
+
+    // Overpass pillars in middle of road (can hide behind)
+    { x: -10, y: 4, z:  0, w: 1.5, h: 8, d: 1.5, theme: 'pillar' },
+    { x:  10, y: 4, z:  0, w: 1.5, h: 8, d: 1.5, theme: 'pillar' },
+  ];
+
+  // Spawn safely on sidewalks (away from active lanes)
+  const spawnPoints = [
+    { x: -38, z: -42 }, { x: -38, z: 0 }, { x: -38, z: 42 },
+    { x:  38, z: -42 }, { x:  38, z: 0 }, { x:  38, z: 42 },
+    { x: -28, z:  20 }, { x:  28, z: -20 },
+  ];
+  return { obstacles, spawnPoints };
+}
+
+const MAPS = {
+  playground: {
+    name: 'Playground',
+    theme: 'playground',
+    sky:    0x87ceeb,
+    fog:    { color: 0xc8e7ff, near: 60, far: 140 },
+    ground: { color: 0x6dc06b },
+    hemiSky: 0xb6e3ff, hemiGround: 0x6dc06b,
+    builder: buildPlaygroundMap,
+  },
+  boat: {
+    name: 'Pirate Ship',
+    theme: 'boat',
+    sky:    0x4a85a3,
+    fog:    { color: 0x6da7c2, near: 50, far: 140 },
+    ground: { color: 0xa67943 },
+    hemiSky: 0x6db8d8, hemiGround: 0x6e4a25,
+    builder: buildBoatMap,
+  },
+  road: {
+    name: 'Highway',
+    theme: 'road',
+    sky:    0xff8a55,
+    fog:    { color: 0xff7d4d, near: 50, far: 130 },
+    ground: { color: 0x303440 },
+    hemiSky: 0xff8a55, hemiGround: 0x202028,
+    hasCars: true,
+    builder: buildRoadMap,
+  },
+};
+
+let currentMapId = 'playground';
+let currentMap = MAPS[currentMapId];
+let obstacles = [];
+let spawnPoints = [];
+
+function loadMap(id) {
+  currentMapId = id;
+  currentMap = MAPS[id];
+  const built = currentMap.builder();
+  obstacles = built.obstacles;
+  spawnPoints = built.spawnPoints;
+}
+
+loadMap(currentMapId);
+
+function mapInfoForClient() {
+  return {
+    id: currentMapId,
+    name: currentMap.name,
+    theme: currentMap.theme,
+    sky: currentMap.sky,
+    fog: currentMap.fog,
+    ground: currentMap.ground,
+    hemiSky: currentMap.hemiSky,
+    hemiGround: currentMap.hemiGround,
+    hasCars: !!currentMap.hasCars,
+  };
+}
 
 function getSpawnPoint() {
   return spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+}
+
+// ============================================================================
+//  ROUND ROTATION
+// ============================================================================
+const ROUND_DURATION = 15 * 60 * 1000; // 15 minutes
+let roundEndTime = Date.now() + ROUND_DURATION;
+
+function rotateMap() {
+  // Determine round winner (most kills; ties broken arbitrarily)
+  let winnerName = null, topKills = -1;
+  for (const id in players) {
+    if (players[id].kills > topKills) {
+      topKills = players[id].kills;
+      winnerName = players[id].name;
+    }
+  }
+
+  // Pick a different random map
+  const candidates = Object.keys(MAPS).filter(k => k !== currentMapId);
+  const nextId = candidates[Math.floor(Math.random() * candidates.length)] || currentMapId;
+  loadMap(nextId);
+
+  // Reset all players: clear scores, full health, respawn
+  bullets.length = 0;
+  cars.length = 0;
+  for (const id in players) {
+    const p = players[id];
+    p.kills = 0;
+    p.deaths = 0;
+    p.health = PLAYER_HEALTH;
+    p.alive = true;
+    const sp = getSpawnPoint();
+    p.x = sp.x; p.y = 1.6; p.z = sp.z;
+  }
+
+  roundEndTime = Date.now() + ROUND_DURATION;
+
+  io.emit('mapChanged', {
+    map: mapInfoForClient(),
+    obstacles,
+    players,
+    winnerName,
+    topKills,
+    roundEndTime,
+    cars,
+  });
+}
+
+// Check round timer once per second
+setInterval(() => {
+  if (Date.now() >= roundEndTime) rotateMap();
+}, 1000);
+
+// ============================================================================
+//  CARS (road map only — dynamic hazards)
+// ============================================================================
+const cars = [];
+const CAR_LANES = [
+  { x: -13.5, dz:  1 }, // left half drives north (+z)
+  { x:  -4.5, dz:  1 },
+  { x:   4.5, dz: -1 }, // right half drives south (-z)
+  { x:  13.5, dz: -1 },
+];
+let nextCarSpawn = 0;
+let carIdSeq = 0;
+
+function updateCars(now, dt) {
+  if (!currentMap.hasCars) return;
+
+  // Spawn a new car periodically
+  if (now > nextCarSpawn && cars.length < 8) {
+    const lane = CAR_LANES[Math.floor(Math.random() * CAR_LANES.length)];
+    const startZ = lane.dz > 0 ? -52 : 52;
+    cars.push({
+      id: 'car-' + (++carIdSeq),
+      x: lane.x + (Math.random() - 0.5) * 1.5,
+      y: 0.7,
+      z: startZ,
+      dz: lane.dz,
+      speed: 28 + Math.random() * 18,
+      w: 2.4, h: 1.4, d: 4.6,
+      color: [0xff4040, 0xffd24d, 0x4d8eff, 0xffffff, 0x222222, 0x4eff66, 0xff8a55][Math.floor(Math.random() * 7)],
+    });
+    io.emit('carSpawned', cars[cars.length - 1]);
+    nextCarSpawn = now + 500 + Math.random() * 900;
+  }
+
+  // Move + collide + despawn
+  for (let i = cars.length - 1; i >= 0; i--) {
+    const c = cars[i];
+    c.z += c.dz * c.speed * dt;
+    if (c.z < -56 || c.z > 56) {
+      const removedId = c.id;
+      cars.splice(i, 1);
+      io.emit('carRemoved', removedId);
+      continue;
+    }
+    // Player collision
+    for (const id in players) {
+      const p = players[id];
+      if (!p.alive) continue;
+      const dx = p.x - c.x;
+      const dz = p.z - c.z;
+      const halfW = c.w / 2 + 0.4;
+      const halfD = c.d / 2 + 0.4;
+      // Treat the car as solid from y=0 to y=h (1.4) — a player on the
+      // sidewalk (y >= 1.6 + 0.5) is above the car and safe.
+      const playerFeetY = p.y - PLAYER_HEIGHT;
+      if (Math.abs(dx) < halfW && Math.abs(dz) < halfD && playerFeetY < c.h) {
+        // Pancaked — instant kill, owner credited as null
+        applyDamage(p, 999);
+        io.emit('playerHit', { playerId: id, health: 0, shooterId: null, blocked: false });
+        if (p.health <= 0) handleKill(id, null);
+      }
+    }
+  }
 }
 
 // Assign colors to players
@@ -297,6 +529,9 @@ io.on('connection', (socket) => {
     weapons: WEAPONS,
     abilities: ABILITIES,
     version: GAME_VERSION,
+    map: mapInfoForClient(),
+    roundEndTime: roundEndTime,
+    cars: currentMap.hasCars ? cars : [],
   });
 
   // Handle player joining the game (click play)
@@ -546,6 +781,10 @@ function handleKill(victimId, killerId) {
 // Game loop
 setInterval(() => {
   const now = Date.now();
+  const dt = 1 / TICK_RATE;
+
+  // Update cars (no-op on maps without hasCars)
+  updateCars(now, dt);
 
   // Update bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
@@ -688,7 +927,10 @@ setInterval(() => {
   //  damage is permanent unless you use the Heal special ability.)
 
   // Broadcast game state
-  io.emit('gameState', { players });
+  io.emit('gameState', {
+    players,
+    cars: currentMap.hasCars ? cars : undefined,
+  });
 }, 1000 / TICK_RATE);
 
 // Get local IP
