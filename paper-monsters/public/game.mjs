@@ -2,7 +2,7 @@ import {platforms,fighter,tickTimers,damage,activate,bloodHit,finishLunge,knifeH
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d');
 const $=s=>document.querySelector(s);
 let p=fighter(),bot=fighter(true),running=false,paused=false,mode='spar',time=0,last=0,shake=0;
-let particles=[],labels=[],keys=new Set(),sound=false,audio,musicClock=0,musicStep=0;
+let particles=[],labels=[],keys=new Set(),sound=true,audio,musicClock=0,musicStep=0;
 const rand=(a,b)=>a+Math.random()*(b-a);
 // A repeatable paper grain, drawn once and shared by the scenery and cutouts.
 let seed=218;function random(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
@@ -136,12 +136,13 @@ function ui(){const fmt=n=>Number.isInteger(n)?n:n.toFixed(1);$('#php').textCont
  for(const b of document.querySelectorAll('[data-ability]')){let key=b.dataset.ability,active=key==='bat'?p.bat:key==='cloak'?p.cloak:0;b.querySelector('strong').textContent=active>0?active.toFixed(1)+'s ACTIVE':p.bat>0?'BAT FORM':p.cd[key]>0?p.cd[key].toFixed(1)+'s':p.stun>0?'STUNNED':'READY';b.querySelector('.cooldown').style.width=100*p.cd[key]/max[key]+'%';b.classList.toggle('locked',p.bat>0||p.cd[key]>0||p.stun>0);b.classList.toggle('active',active>0);}
  $('#hint').textContent=p.bat>0?'Fly with WASD / arrows. Attacks recharge while you fly.':p.cloak>0?'The bot cannot see you. Your ghost is visible only to you.':'Face your target to lunge. Space twice to double-jump.';
 }
-function start(){p=fighter();bot=fighter(true);particles=[];labels=[];keys.clear();botJump=0;running=true;paused=false;$('#overlay').hidden=true;$('#pause').hidden=true;$('#pausebutton').textContent='Ⅱ';canvas.focus({preventScroll:true});}
+function resumeAudio(){if(!sound)return;audio??=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}
+function start(){resumeAudio();p=fighter();bot=fighter(true);particles=[];labels=[];keys.clear();botJump=0;running=true;paused=false;$('#overlay').hidden=true;$('#pause').hidden=true;$('#pausebutton').textContent='Ⅱ';canvas.focus({preventScroll:true});}
 function endRound(){running=false;keys.clear();const won=bot.hp<=0;$('#overlay').innerHTML='<div class="ticket"><span class="eyebrow">REHEARSAL COMPLETE</span><h2>'+ (won?'A well-earned victory.':'One more rehearsal?')+'</h2><p>'+(won?'The patchwork bot takes a bow.':'Every fighter starts with practice.')+'<br>Reset and try another approach.</p><button id="again">Play again →</button><small>YOUR ABILITIES AND HEALTH WILL RESET</small></div>';$('#overlay').hidden=false;$('#again').onclick=start;tone(won?587:196,.6,'triangle',.05,won?1.5:.5);}
 function pauseToggle(){if(!running)return;paused=!paused;keys.clear();$('#pause').hidden=!paused;$('#pausebutton').textContent=paused?'▶':'Ⅱ';}
 $('#play').onclick=start;$('#reset').onclick=start;$('#pausebutton').onclick=pauseToggle;$('#pause').onclick=pauseToggle;
 $('#botmode').onchange=e=>{mode=e.target.value;$('#mode-label').textContent=mode==='spar'?'SPARRING':'STANDING STILL';};
-$('#sound').onclick=()=>{sound=!sound;if(sound){audio??=new (window.AudioContext||window.webkitAudioContext)();audio.resume();tone(440,.2,'sine',.04);}$('#sound').textContent=sound?'Sound on':'Sound off';$('#sound').setAttribute('aria-pressed',String(sound));};
+$('#sound').onclick=()=>{sound=!sound;if(sound){resumeAudio();tone(440,.2,'sine',.04);}$('#sound').textContent=sound?'Sound on':'Sound off';$('#sound').setAttribute('aria-pressed',String(sound));};
 const mapping={KeyJ:'knife',KeyK:'blood',KeyL:'cloak',KeyI:'bat'};
 window.addEventListener('keydown',e=>{if(e.target.matches('select,input'))return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();if(e.code==='Escape'&&!e.repeat){pauseToggle();return;}if(!running||paused)return;keys.add(e.code);if(!e.repeat){if(e.code==='Space')jump(p);if(mapping[e.code])use(mapping[e.code]);}});
 window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(running&&!paused)pauseToggle();});document.addEventListener('visibilitychange',()=>{if(document.hidden&&running&&!paused)pauseToggle();});

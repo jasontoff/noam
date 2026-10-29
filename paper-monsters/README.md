@@ -8,7 +8,7 @@ From the repository root: `python3 -m http.server 8080 --bind 127.0.0.1`, then o
 
 ## Controls
 
-A/D or left/right: move. Space: jump / double-jump. J: knife. K: Bloodsuck. L: Dark Cloak. I: Bat Wings. WASD/arrows while a bat: fly. Esc: pause. Touch movement and clickable ability cards are included. Reset starts a fresh round; practice bot can spar or stand still. Sound is opt-in.
+A/D or left/right: move. Space: jump / double-jump. J: knife. K: Bloodsuck. L: Dark Cloak. I: Bat Wings. WASD/arrows while a bat: fly. Esc: pause. Touch movement and clickable ability cards are included. Reset starts a fresh round; practice bot can spar or stand still. Sound is enabled by default and starts when the player enters the stage (a browser-permitted interaction). The sound toggle can mute it before or during play.
 
 ## Rules
 
