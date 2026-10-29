@@ -17,7 +17,7 @@ From the repository root: `python3 -m http.server 8080 --bind 127.0.0.1`, then o
 
 ## Controls
 
-A/D or left/right: move. Space: jump / double-jump. Vampire: J knife, K Bloodsuck, L Dark Cloak, I Bat Wings. Assassin: J katana, K dagger, L throwing knives. Point or tap in the arena to set aim; W/S or up/down adjusts the angle for keyboard-only aiming, with left/right movement setting facing. WASD/arrows while a bat: fly. Esc: pause. Touch movement and clickable ability cards are included. Reset starts a fresh round; practice bot can spar or stand still. Sound is enabled by default and starts when the player enters the stage (a browser-permitted interaction). The sound toggle can mute it before or during play.
+A/D or left/right: move. Space: jump / double-jump. Vampire: J knife, K Bloodsuck, L Dark Cloak, I Bat Wings. Assassin: J katana, K dagger, L throwing knives. Left-click the arena to aim and fire an Assassin volley; L remains available. Touch the arena to set aim, then tap Throwing Knives; W/S or up/down adjusts the angle for keyboard-only aiming, with left/right movement setting facing. WASD/arrows while a bat: fly. Esc: pause. Touch movement and clickable ability cards are included. Reset starts a fresh round; practice bot can spar or stand still. Sound is enabled by default and starts when the player enters the stage (a browser-permitted interaction). The sound toggle can mute it before or during play.
 
 ## Rules
 
@@ -60,3 +60,16 @@ Push to main triggers the existing Firebase Hosting workflow, copies public asse
 ## Balance validation
 
 See `balance/REPORT.md` and the reproducible `balance/simulate.mjs`. This uses the actual runtime update/physics/attacks with scripted player inputs in both engine slots; it does not infer human competitive balance from DPS alone.
+
+## iPad and hybrid input
+
+Touch layout activates with coarse-pointer capability, or iPadOS's MacIntel platform plus multiple touch points. A Touch controls / Keyboard layout toggle allows manual selection on hybrid devices. Both layouts retain keyboard and mouse input. The touch layout uses a viewport-height-limited arena, compact selectors, 44px-minimum movement/pause/reset targets, 66px ability buttons with cooldowns, and safe-area padding. Normal page scrolling and zoom remain available outside gameplay controls.
+
+- Hold left/right and tap Jump twice for a double-jump. Other fingers can activate abilities simultaneously.
+- Vampire bat: hold up/down and left/right together for diagonal flight. Jump also flies upward while held.
+- Assassin: touch/drag the arena to aim without firing, then tap Throwing Knives. Up/down adjust angle; horizontal movement sets facing. Mouse left-click aims and fires immediately; right-click and UI clicks do not fire. Keyboard L is unchanged.
+- Barbarian: tap either axe ability and Rampage with separate contacts to overlap them. Cooldowns and movement restrictions are unchanged.
+- Pointer IDs and keyboard holds are tracked independently; cancellation, lost capture, reset, pause, window blur, hidden page, resize and rotation clear held input. Rotation/focus loss pauses active play. Resume with the pause overlay.
+- Sound stays on by default and unlocks on entry/interaction; mute is retained. Audio resumes only through interactions. DOM HUD updates are capped near12Hz while physics and canvas retain animation-frame timing.
+
+Validation: 51 automated tests include real handler calls with multiple synthetic pointer IDs, keyboard/touch overlap, bat flight, double jump, axe/Rampage overlap, aiming-only touch, mouse firing without duplicates, input interruption and iPad desktop-UA detection. Browser checks cover768×1024,1024×768,820×1180 and1180×820 layouts,44px target sizes, no horizontal overflow, and desktop mouse/keyboard regression. These are desktop-browser viewport checks and automated input-handler tests, not physical iPad Safari or hardware multi-touch testing.
