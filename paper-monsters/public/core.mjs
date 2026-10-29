@@ -8,7 +8,7 @@ export const roster={
  barbarian:{name:'Barbarian',hp:120,max:120,moves:['heavy','combo','rampage']},
  dummy:{name:'Patchwork',hp:100,max:100,moves:['knife']}
 };
-export const cooldowns={knife:2,blood:5,cloak:20,bat:30,katana:3,dagger:5,volley:12,heavy:5,combo:45,rampage:60};
+export const cooldowns={knife:2,blood:5,cloak:20,bat:30,katana:3,dagger:5,volley:12,heavy:3.5,combo:45,rampage:60};
 export function fighter(bot=false,kind=bot?'dummy':'vampire') {
   const def=roster[kind];
   return {kind,x:bot?935:345,y:615,vx:0,vy:0,dir:bot?-1:1,hp:def.hp,max:def.max,
@@ -96,16 +96,16 @@ export function stepAxe(p,target,dt){
  const axe=p.axe;if(!axe)return [];
  if(p.hp<=0||p.stun>0){p.axe=null;return [];}
  axe.elapsed+=dt;const impacts=[],total=axe.type==='heavy'?1:5;
- const due=()=>axe.type==='heavy'?.45:.35+axe.swings*.5;
+ const due=()=>axe.type==='heavy'?.35:.35+axe.swings*.5;
  while(axe.swings<total&&axe.elapsed+1e-9>=due()){
   const side=axe.dir*(axe.type==='combo'&&axe.swings%2?-1:1);
   p.axeSide=side;p.axeFlash=.22;p.attack=.22;
   const dx=target.x-p.x,vertical=Math.abs((p.y-bodyHeight(p)/2)-(target.y-bodyHeight(target)/2));
-  const hit=(axe.type==='combo'||dx*side>=-12)&&Math.abs(dx)<(axe.type==='heavy'?150:135)+radius(target)&&vertical<(bodyHeight(p)+bodyHeight(target))*.5;
+  const hit=(axe.type==='combo'||dx*side>=-12)&&Math.abs(dx)<(axe.type==='heavy'?150:135)+radius(target)&&vertical<(bodyHeight(p)+bodyHeight(target))*.5+(axe.type==='heavy'&&target.y<p.y?35:0);
   let dealt=0;if(hit){const base=axe.type==='heavy'?10:2+axe.hits*2;axe.hits++;dealt=damage(target,base,p);}
   impacts.push({hit,dealt,side,swing:axe.swings+1});axe.swings++;
  }
- const duration=axe.type==='heavy'?.8:2.65;
+ const duration=axe.type==='heavy'?.7:2.65;
  if(axe.elapsed>=duration)p.axe=null;
  return impacts;
 }

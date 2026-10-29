@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
-const mechanics=await import(process.env.BASELINE?'./baseline-core.mjs':'../public/core.mjs');
+const mechanics=await import(process.env.MECHANICS|| (process.env.BASELINE?'./baseline-core.mjs':'../public/core.mjs'));
 
 // Uses the shipped game update, physics, projectile, attack, and cooldown functions.
 // Replace ONLY practice-bot input with a second scripted player, including its bat controls.
@@ -42,8 +42,9 @@ function controller(actor,enemy,style,random,api,stats){
   move=dist>desired?sign:0;
   const threat=enemy.axe||enemy.lunge>0||enemy.attackType==='volley'&&enemy.attack>0;
   if(cfg.dodge&&threat&&dist<200){move=-sign;if(actor.ground&&t>jumpReady&&random()<.65){api.jump(actor);jumpReady=t+1.1;}}
-  if(cfg.spacing&&dist<140&&!threat){const primary=actor.kind==='vampire'?'knife':actor.kind==='assassin'?'katana':'heavy';if(!ready(primary)&&!(actor.kind==='vampire'&&ready('blood')))move=dist<110?-sign:0;}
-  if(actor.ground&&t>jumpReady&&(dy<-70||random()<cfg.jump)){api.jump(actor);jumpReady=t+1.1;}
+  if(cfg.spacing&&!actor.axe&&dist<140&&!threat){const primary=actor.kind==='vampire'?'knife':actor.kind==='assassin'?'katana':'heavy';if(!ready(primary)&&!(actor.kind==='vampire'&&ready('blood')))move=dist<110?-sign:0;}
+  if(actor.ground&&t>jumpReady&&(dy<-70||(!actor.axe&&random()<cfg.jump))){api.jump(actor);jumpReady=t+1.1;}
+  if(actor.axe){move=dist>48?sign:0;}
   if(!actor.axe&&actor.lunge<=0){perceivedDir=sign;actor.dir=sign;}
   const aim=Math.atan2(dy-(mechanics.bodyHeight(enemy)/2-42)+enemy.vy*.08,dx+enemy.vx*.1)+(random()-.5)*cfg.error*2;
   const cast=type=>{if(api.cast(actor,enemy,type,aim)){stats.attempts[type]=(stats.attempts[type]||0)+1;return true;}return false;};
@@ -59,6 +60,10 @@ function controller(actor,enemy,style,random,api,stats){
    if(dist<650&&ready('volley'))cast('volley');
    if(dist<65&&Math.abs(dy)<70&&ready('dagger')&&actor.cd.katana>.3)cast('dagger');
   }else{
+   // Avoid committing a delayed melee strike while jumping away above a grounded target.
+   if(cfg.spacing&&actor.y<enemy.y-20&&actor.vy<-100&&enemy.vy>=0)return [move,fly];
+   // A deliberate fighter waits out a crossing lunge instead of locking an axe the wrong way.
+   if(cfg.spacing&&enemy.kind==='vampire'&&(enemy.lunge>0||enemy.cd.blood<.3)&&dist<240)return [move,fly];
    if(dist<(cfg.spacing?110:145)&&(ready('heavy')||ready('combo'))&&ready('rampage'))cast('rampage');
    if(dist<(cfg.spacing?95:145)&&ready('combo'))cast('combo');
    if(dist<(cfg.spacing?110:155)&&ready('heavy'))cast('heavy');
@@ -88,7 +93,7 @@ const kinds=['vampire','assassin','barbarian'],styles=Object.keys(profiles),samp
 for(let i=0;i<kinds.length;i++)for(let j=i+1;j<kinds.length;j++)for(const a of styles)for(const b of styles)for(let side=0;side<2;side++)for(let role=0;role<2;role++)for(let n=1;n<=samples;n++)results.push(match(kinds[i],kinds[j],a,b,side,seedOffset+1700+n*317+side*97,role));
 // Mirror checks verify side/order biases, with equal character identities counted by surviving actor.
 for(const kind of kinds)for(const style of styles)for(let side=0;side<2;side++)for(let n=1;n<=3;n++)results.push({...match(kind,kind,style,style,side,seedOffset+n*991+17),mirror:true});
-const summary={matches:results.length,seedOffset,secondsLimit:150,profiles,matchups:{},byStyle:{},mirror:{}};
+const summary={matches:results.length,seedOffset,mechanics:process.env.MECHANICS||'../public/core.mjs',controllerVersion:4,secondsLimit:150,profiles,matchups:{},byStyle:{},mirror:{}};
 for(const r of results){
  if(r.mirror){const m=summary.mirror[r.a]??={first:0,second:0,timeout:0};m[r.hp[0]>0&&r.hp[1]<=0?'first':r.hp[1]>0&&r.hp[0]<=0?'second':'timeout']++;continue;}
  const key=r.a+' vs '+r.b;

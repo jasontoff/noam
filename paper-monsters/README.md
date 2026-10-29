@@ -52,7 +52,7 @@ Push to main triggers the existing Firebase Hosting workflow, copies public asse
 
 120 starting/max HP. Base movement 216px/s (10% slower than the other fighters' 240px/s). Three abilities only; no generic knife.
 
-- J — Cleaving Strike: 10 damage, 150px forward reach plus target radius, 0.45s visible windup, 0.8s total action. Speed is 55% of the current base during this action. Cooldown 5s from activation.
+- J — Cleaving Strike: 10 damage, 150px forward reach plus target radius, 0.35s visible windup, 0.7s total action. Speed is 55% of the current base during this action. Its overhead arc extends 35px higher against targets above it; horizontal reach and downward reach are unchanged. Cooldown 3.5s from activation.
 - K — Axe Tempest: five alternating sweeps that cover both sides with 135px reach plus target radius. Impacts at 0.35, 0.85, 1.35, 1.85 and 2.35s; action ends at 2.65s. Successful hits escalate 2,4,6,8,10 (30 maximum before modifiers). Misses do not advance the count. Movement is 30% of current base, no new jumps, no hit-stun applied to opponents. Cooldown 45s from activation.
 - L — Rampage: lasts 3s, can overlap either axe action. Damage dealt ×1.5, damage received ×0.8, base movement 264px/s (10% faster than other fighters); axe movement restrictions still apply. No damage rounding is applied by these modifiers. Cooldown 60s from activation.
 - If no damage was dealt during Rampage: cancel outstanding axe action, stun 3s, then move at 55% base speed for a full 5s. A single successful damage event during Rampage prevents both penalties.
