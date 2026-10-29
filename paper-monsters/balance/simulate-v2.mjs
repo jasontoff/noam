@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {arenas} from '../public/maps.mjs';
+import {OnlineClient} from '../public/online.mjs';
 const mechanics=await import(process.env.MECHANICS|| (process.env.BASELINE?'./baseline-core.mjs':'../public/core.mjs'));
 
 // Uses the shipped game update, physics, projectile, attack, and cooldown functions.
@@ -15,7 +17,7 @@ function rng(seed){return ()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;ret
 function environment(){
  const drawing=new Proxy({},{get:(_,key)=>()=>key==='createLinearGradient'?{addColorStop(){}}:undefined,set:()=>true});
  const elements=new Map();const el=s=>{if(!elements.has(s))elements.set(s,{style:{},focus(){},getContext:()=>drawing,classList:{toggle(){}},setAttribute(){},addEventListener(){}});return elements.get(s);};
- const sandbox={...mechanics,console,Math,document:{querySelector:el,querySelectorAll:()=>[],createElement:()=>el('canvas'),addEventListener(){}},window:{addEventListener(){}},requestAnimationFrame(){},simBotVx:0,simBotVy:0,recordDamage:()=>{}};
+ const sandbox={...mechanics,arenas,OnlineClient,console,Math,document:{querySelector:el,querySelectorAll:()=>[],createElement:()=>el('canvas'),addEventListener(){}},window:{addEventListener(){}},requestAnimationFrame(){},simBotVx:0,simBotVy:0,recordDamage:()=>{}};
  vm.createContext(sandbox);script.runInContext(sandbox);
  const api=vm.runInContext(`({
   reset(a,b,side){sound=false;selected=a;botChoice=b;mode='dummy';resetFighters();running=true;paused=false;p.x=side?935:345;bot.x=side?345:935;p.dir=side?-1:1;bot.dir=-p.dir;return [p,bot];},

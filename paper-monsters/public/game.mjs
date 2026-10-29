@@ -1,8 +1,12 @@
-import {platforms,fighter,tickTimers,damage,activate,bloodHit,finishLunge,knifeHit,radius,bodyHeight,roster,cooldowns,daggerHit,newVolley,volleyHit,projectileHits,botBrain,thinkBot,moveSpeed,stepAxe} from './core.mjs';
+import {platforms,fighter,tickTimers,damage,activate,bloodHit,finishLunge,knifeHit,radius,bodyHeight,roster,cooldowns,daggerHit,newVolley,volleyHit,projectileHits,botBrain,thinkBot,moveSpeed,stepAxe} from './core.mjs'; import {arenas} from './maps.mjs'; import {OnlineClient} from './online.mjs';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d');
 const $=s=>document.querySelector(s);
 let p=fighter(),bot=fighter(true,'vampire'),running=false,paused=false,mode='spar',time=0,last=0,shake=0;
 let particles=[],labels=[],keys=new Set(),sound=true,audio,musicClock=0,musicStep=0;
+let menuOpen=true;
+function showModes(value){menuOpen=value;document.body?.classList.toggle('menu-open',value);$('#mode-toggle').setAttribute('aria-expanded',String(value));}
+let networkNotice=null,netTargets=new Map(),netReceived=0;
+let currentMap='manor',onlineMode=false,onlineRoom=null,onlineState=null,onlineActors=[],networkTick=0;
 let selected='vampire',botChoice='random',brain=botBrain(),projectiles=[],volleys=[];
 let aim={pointer:false,x:950,y:570,elevation:0};
 // Keep keyboard and every contact separate: releasing one finger must not cancel another.
@@ -33,8 +37,8 @@ function tower(x,y,w,h,color){poly([[x,y+h],[x,y],[x+w*.5,y-w*.75],[x+w,y],[x+w,
 const bg=document.createElement('canvas');bg.width=1280;bg.height=720;
 // Render the static theatre into a cached layer using the same drawing helpers.
 function scenery(){
- ctx.fillStyle='#38313e';ctx.fillRect(0,0,1280,720);
- let sky=ctx.createLinearGradient(0,0,0,620);sky.addColorStop(0,'#302c3a');sky.addColorStop(1,'#8f7067');ctx.fillStyle=sky;ctx.fillRect(0,0,1280,650);
+ ctx.fillStyle=arenas[currentMap].color;ctx.fillRect(0,0,1280,720);
+ let sky=ctx.createLinearGradient(0,0,0,620);sky.addColorStop(0,arenas[currentMap].color);sky.addColorStop(1,currentMap==='stronghold'?'#8d865d':currentMap==='rooftops'?'#577a83':'#8f7067');ctx.fillStyle=sky;ctx.fillRect(0,0,1280,650);
  ellipse(670,216,116,116,'#d5c5a4');ellipse(680,210,103,103,'#ddceb0');
  ctx.save();ctx.beginPath();ctx.arc(670,216,116,0,7);ctx.clip();for(let i=0;i<35;i++)ellipse(570+random()*200,115+random()*200,4+random()*17,3+random()*12,'#ac987833');ctx.fillStyle=pattern;ctx.globalAlpha=.3;ctx.fillRect(540,80,260,260);ctx.restore();
  for(let i=0;i<70;i++){let x=random()*1280,y=70+random()*330;ctx.fillStyle='#e5d3ac66';ctx.fillRect(x,y,1.5,1.5);}
@@ -49,7 +53,7 @@ function scenery(){
  poly([[0,0],[37,0],[32,136],[19,193],[0,214]],'#472b39');
  poly([[1280,0],[1162,0],[1174,99],[1188,153],[1217,199],[1252,227],[1280,232]],'#693946');
  poly([[1280,0],[1243,0],[1248,136],[1261,193],[1280,214]],'#472b39');
- for(const a of platforms){
+ for(const a of arenas[currentMap].platforms){
   if(a.h>30){poly([[a.x,a.y],[a.x+a.w,a.y],[a.x+a.w-8,720],[a.x+10,720]],'#51444c');
    for(let yy=a.y+22;yy<720;yy+=29){line(a.x+8,yy,a.x+a.w-8,yy,'#2e283744',2);for(let xx=a.x+(yy%2)*40;xx<a.x+a.w-20;xx+=80)line(xx,yy,xx,yy+29,'#2e283744',2);}
    for(let x=180;x<1150;x+=180){poly([[x-28,645],[x+28,645],[x+28,716],[x,701],[x-28,716]],'#793f50');poly([[x-8,660],[x+8,660],[x+12,678],[x,689],[x-12,678]],'#b99a78');}
@@ -159,7 +163,7 @@ function attackWith(a,target,type,angle){if(!activate(a,type))return false;
  if(type==='volley'){if(!a.bot&&Math.abs(Math.cos(angle))>.01)a.dir=Math.sign(Math.cos(angle));volleys.push(newVolley(a,angle));noise(.13,.035);}
  return true;
 }
-function use(type){if(!running||paused)return;attackWith(p,bot,type,aimAngle());}
+function use(type){if(!running||paused)return;if(onlineMode){if(onlineRoom?.phase==='playing')network.send({type:'action',move:type,angle:aimAngle()});return;}attackWith(p,bot,type,aimAngle());}
 function stepProjectiles(dt){
  for(const v of volleys){v.elapsed+=dt;while(v.launched<3&&v.elapsed>=v.launched*.14){const dx=Math.cos(v.angle),dy=Math.sin(v.angle);projectiles.push({x:v.owner.x+dx*30,y:v.owner.y-42+dy*30,vx:dx*680,vy:dy*680,life:1.35,volley:v});v.launched++;}}
  volleys=volleys.filter(v=>v.launched<3);
@@ -172,13 +176,13 @@ function stepLunge(a,target,dt){if(a.lunge<=0)return;
  if(overlap(a,target,37)&&!a.lungeHit){const r=bloodHit(a,target);hitEffect(target,r.dealt);if(r.healed>0){textLabel(a.x,a.y-110,'+'+r.healed,'#c4d5a8');tone(620,.24,'sine',.04,1.5);}burst(a.x,a.y-40,'#8eac83',8);}
  a.lunge-=dt;if(a.lunge<=0){finishLunge(a);a.vx=0;if(a.stun>0){textLabel(a.x,a.y-115,'MISSED · STUNNED','#decba6');tone(100,.15,'triangle',.035,.65);}}
 }
-function jump(a){if(a.bat>0||a.stun>0||a.jumps>=2||a.axe?.type==='combo')return;a.vy=-660;a.ground=false;a.jumps++;if(a===p)tone(180,.09,'sine',.025,1.5);burst(a.x,a.y,'#b9a88b',5);}
+function jump(a){if(onlineMode&&a===p){if(onlineRoom?.phase==='playing'&&!paused)network.send({type:'action',move:'jump',angle:aimAngle()});return;}if(a.bat>0||a.stun>0||a.jumps>=2||a.axe?.type==='combo')return;a.vy=-660;a.ground=false;a.jumps++;if(a===p)tone(180,.09,'sine',.025,1.5);burst(a.x,a.y,'#b9a88b',5);}
 function physics(a,dt){let oldY=a.y;
  if(a===p&&a.bat>0){a.vx=((keys.has('KeyD')||keys.has('ArrowRight'))-(keys.has('KeyA')||keys.has('ArrowLeft')))*285;a.vy=((keys.has('KeyS')||keys.has('ArrowDown'))-(keys.has('KeyW')||keys.has('ArrowUp')||keys.has('Space')))*260;}
  else a.vy+=1250*dt;
  a.x+=a.vx*dt;a.y+=a.vy*dt;a.x=Math.max(105,Math.min(1175,a.x));
  if(a.bat>0){a.y=Math.max(135,Math.min(610,a.y));}
- else{a.ground=false;if(a.vy>=0)for(const plat of platforms){if(a.x+18>plat.x&&a.x-18<plat.x+plat.w&&oldY<=plat.y+1&&a.y>=plat.y){a.y=plat.y;a.vy=0;a.ground=true;a.jumps=0;break;}}
+ else{a.ground=false;if(a.vy>=0)for(const plat of arenas[currentMap].platforms){if(a.x+18>plat.x&&a.x-18<plat.x+plat.w&&oldY<=plat.y+1&&a.y>=plat.y){a.y=plat.y;a.vy=0;a.ground=true;a.jumps=0;break;}}
  if(a.y>690){a.y=615;a.vy=0;a.ground=true;a.jumps=0;}}
  if(!a.bot&&!a.axe&&Math.abs(a.vx)>1&&a.lunge<=0)a.dir=Math.sign(a.vx);
 }
@@ -203,15 +207,17 @@ function update(dt){time+=dt;tickTimers(p,dt);tickTimers(bot,dt);
  physics(p,dt);physics(bot,dt);stepLunge(p,bot,dt);stepLunge(bot,p,dt);stepProjectiles(dt);
  for(const [attacker,target]of [[p,bot],[bot,p]])for(const result of stepAxe(attacker,target,dt)){noise(.15,.05);if(result.hit){hitEffect(target,result.dealt);burst(target.x,target.y-45,'#d6b27b',15);shake=7;}else burst(attacker.x+result.side*100,attacker.y-40,'#968775',5);}
  if(p.hp<=0||bot.hp<=0)endRound();
- musicClock-=dt;if(musicClock<=0){musicClock=.4;const melody=[293.66,0,440,349.23,0,329.63,261.63,0,293.66,0,523.25,440,349.23,0,329.63,0];let f=melody[musicStep++%melody.length];if(f)tone(f,.35,'sine',.018,.998);if(musicStep%4===0)tone(73.42,.55,'triangle',.012);}
+ stepMusic(dt);
+}
+function stepMusic(dt){ musicClock-=dt;if(musicClock<=0){musicClock=.4;const melody=[293.66,0,440,349.23,0,329.63,261.63,0,293.66,0,523.25,440,349.23,0,329.63,0];let f=melody[musicStep++%melody.length];if(f)tone(f,.35,'sine',.018,.998);if(musicStep%4===0)tone(73.42,.55,'triangle',.012);}
 }
 function render(dt){ctx.clearRect(0,0,1280,720);ctx.save();if(shake>0){ctx.translate(rand(-shake,shake),rand(-shake,shake));shake=Math.max(0,shake-dt*35);}ctx.drawImage(bg,0,0);
  // Floating dust and distant paper bats.
  for(let i=0;i<16;i++){let x=(i*89+Math.sin(time*.3+i)*28)%1280,y=210+(i*43)%350+Math.cos(time*.6+i)*9;ellipse(x,y,1.4,1.4,'#e5c59744');}
- for(const a of [p,bot]){ellipse(a.x,Math.min(618,a.y+3),a.bat?15:28,5,'#120e2344');}
- drawFighter(bot);drawFighter(p);drawAim();
- if(brain.pending&&mode==='spar'){ctx.font='bold 13px Arial';ctx.textAlign='center';ctx.fillStyle='#f0c78a';ctx.fillText('! '+(brain.pending==='volley'?'KNIVES':brain.pending.toUpperCase()),bot.x,bot.y-124);line(bot.x,bot.y-115,bot.x+bot.dir*48,bot.y-115,'#f0c78a',2);}
- for(const a of [p,bot])if(a.backstab>0){ctx.save();ctx.strokeStyle='#f0c57a';ctx.lineWidth=3;const size=35+(1-a.backstab/.5)*45;line(a.x-size/2,a.y-40-size/2,a.x+size/2,a.y-40+size/2,'#f0c57a',3);line(a.x-size/2,a.y-40+size/2,a.x+size/2,a.y-40-size/2,'#f0c57a',3);ctx.restore();}
+ for(const a of (onlineMode?[p,...onlineActors]:[p,bot])){if(a.hidden||a.hp<=0)continue;ellipse(a.x,Math.min(618,a.y+3),a.bat?15:28,5,'#120e2344');}
+ if(onlineMode){for(const a of onlineActors)if(!a.hidden&&a.hp>0){drawFighter(a);ctx.font='12px Arial';ctx.textAlign='center';ctx.fillStyle='#ead8bc';ctx.fillText(a.name,a.x,a.y-bodyHeight(a)-20);}if(p.hp>0)drawFighter(p);}else{drawFighter(bot);drawFighter(p);}drawAim();
+ if(!onlineMode&&brain.pending&&mode==='spar'){ctx.font='bold 13px Arial';ctx.textAlign='center';ctx.fillStyle='#f0c78a';ctx.fillText('! '+(brain.pending==='volley'?'KNIVES':brain.pending.toUpperCase()),bot.x,bot.y-124);line(bot.x,bot.y-115,bot.x+bot.dir*48,bot.y-115,'#f0c78a',2);}
+ for(const a of (onlineMode?[p,...onlineActors]:[p,bot]))if(!a.hidden&&a.backstab>0){ctx.save();ctx.strokeStyle='#f0c57a';ctx.lineWidth=3;const size=35+(1-a.backstab/.5)*45;line(a.x-size/2,a.y-40-size/2,a.x+size/2,a.y-40+size/2,'#f0c57a',3);line(a.x-size/2,a.y-40+size/2,a.x+size/2,a.y-40-size/2,'#f0c57a',3);ctx.restore();}
  for(const k of projectiles){ctx.save();ctx.translate(k.x,k.y);ctx.rotate(Math.atan2(k.vy,k.vx));poly([[-13,-3],[12,0],[-13,3],[-8,0]],k.volley.owner===p?'#d7dfbb':'#d9a286');ctx.restore();}
  if(p.lunge>0){for(let i=1;i<5;i++)line(p.x-p.dir*(30+i*12),p.y-50+i*7,p.x-p.dir*(60+i*18),p.y-50+i*7,'#b16a7c88',3);}
  if(p.attack>0&&p.kind!=='barbarian'&&p.attackType!=='volley'){ctx.save();ctx.translate(p.x,p.y-45);ctx.scale(p.dir,1);ctx.beginPath();ctx.arc(22,0,p.attackType==='katana'?95:p.attackType==='dagger'?36:57,-.8,.7);ctx.strokeStyle='#ead7b2aa';ctx.lineWidth=3;ctx.stroke();ctx.restore();}
@@ -244,16 +250,17 @@ function ui(){const fmt=n=>Number.isInteger(n)?n:n.toFixed(1);$('#pname').textCo
  $('#bstatus').textContent=p.cloak>0?'Lost sight of you…':bot.stun>0?'STUNNED · '+bot.stun.toFixed(1)+'s':bot.rampage>0?'RAMPAGE · '+bot.rampage.toFixed(1)+'s':mode==='dummy'?'Standing still · facing '+(bot.dir===1?'right':'left'):brain.pending?'WINDUP · '+moveInfo[brain.pending][0]:brain.turn>0?'Turning… backstab window':brain.recovery>0?'Recovering · '+brain.recovery.toFixed(1)+'s':'Watching for an opening';
  for(const b of document.querySelectorAll('[data-ability]')){let key=b.dataset.ability,active=key==='bat'?p.bat:key==='cloak'?p.cloak:key==='rampage'?p.rampage:0;b.querySelector('strong').textContent=active>0?active.toFixed(1)+'s ACTIVE':p.bat>0?'BAT FORM':p.cd[key]>0?p.cd[key].toFixed(1)+'s':p.stun>0?'STUNNED':'READY';b.querySelector('.cooldown').style.width=100*p.cd[key]/cooldowns[key]+'%';b.classList.toggle('locked',p.bat>0||p.cd[key]>0||p.stun>0);b.classList.toggle('active',active>0);}
  $('#touch-help').textContent=p.kind==='assassin'?'Aim: touch or drag on the arena, then tap Throwing Knives. ↑ / ↓ adjust the aim angle; moving left / right sets facing.':p.bat>0?'BAT FLIGHT: hold ↑ / ↓ and ← / → together to fly diagonally. Attacks recharge while flying.':'Hold ← / → to move. Tap Jump twice to double-jump. Use abilities with your other hand.'+(p.kind==='vampire'?' ↑ / ↓ control bat flight.':'');
+ if(onlineMode){$('#bname').textContent='ONLINE RIVALS';$('#bhp').textContent=onlineRoom?onlineRoom.players.length+' players':'Waiting';$('#bstatus').textContent=onlineRoom?.phase==='playing'?Math.max(0,180-Math.floor(onlineState?.time||0))+'s remaining · last fighter standing':'No bots in online modes';$('#bbar').style.width='100%';if(p.hp<=0)$('#pstatus').textContent='ELIMINATED · spectating';updateOnlineUI();}
  $('#hint').textContent=p.bat>0?'Fly with WASD / arrows. Attacks recharge while you fly.':p.cloak>0?'The bot cannot see you. Your ghost is visible only to you.':p.kind==='barbarian'?'J heavy strike · K Axe Tempest · L Rampage — land a hit!':p.kind==='assassin'?'Mouse: click to throw · Touch: aim, then tap Throwing Knives · L also throws':'Face your target to lunge. Space twice to double-jump.';
 }
 function resumeAudio(){if(!sound)return;const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;audio??=new Audio();const resumed=audio.resume();resumed?.catch?.(()=>{});}
 function resetFighters(){p=fighter(false,selected);const identity=botChoice==='random'?(['vampire','assassin','barbarian'][Math.floor(Math.random()*3)]):botChoice;bot=fighter(true,identity);brain=botBrain();particles=[];labels=[];projectiles=[];volleys=[];clearInput();aim={pointer:false,x:950,y:570,elevation:0};setupCards();}
-function start(){resumeAudio();resetFighters();running=true;paused=false;$('#overlay').hidden=true;$('#pause').hidden=true;$('#pausebutton').textContent='Ⅱ';canvas.focus({preventScroll:true});}
+function start(){if(onlineMode)return;showModes(false);document.body?.classList.toggle('practice-running',true);resumeAudio();resetFighters();running=true;paused=false;$('#overlay').hidden=true;$('#pause').hidden=true;$('#pausebutton').textContent='Ⅱ';canvas.focus({preventScroll:true});}
 function endRound(){running=false;clearInput();const won=bot.hp<=0;$('#overlay').innerHTML='<div class="ticket"><span class="eyebrow">REHEARSAL COMPLETE</span><h2>'+ (won?'A well-earned victory.':'One more rehearsal?')+'</h2><p>'+(won?'Your practice opponent takes a bow.':'Every fighter starts with practice.')+'<br>Reset and try another approach.</p><button id="again">Play again →</button><small>YOUR ABILITIES AND HEALTH WILL RESET</small></div>';$('#overlay').hidden=false;$('#again').onclick=start;tone(won?587:196,.6,'triangle',.05,won?1.5:.5);}
-function pauseToggle(){if(!running)return;paused=!paused;clearInput();if(!paused)resumeAudio();$('#pause').hidden=!paused;$('#pausebutton').textContent=paused?'▶':'Ⅱ';}
+function pauseToggle(){if(!running)return;paused=!paused;clearInput();if(!paused)resumeAudio();$('#pause').hidden=!paused;$('#pausebutton').textContent=paused?'▶':'Ⅱ';if(onlineMode){network.send({type:'input',x:0,y:0,angle:0});$('#pause').innerHTML='<span>CONTROLS PAUSED · online round continues</span><span>Tap to resume</span>';}else $('#pause').innerHTML='INTERMISSION <span>Press Esc or tap to resume</span>';}
 $('#play').onclick=start;$('#reset').onclick=start;$('#pausebutton').onclick=pauseToggle;$('#pause').onclick=pauseToggle;
 $('#botmode').onchange=e=>{clearInput();mode=e.target.value;brain=botBrain();bot.vx=0;bot.lunge=0;bot.axe=null;bot.rampage=0;bot.slow=0;bot.stun=0;bot.penaltyStun=0;projectiles=[];volleys=[];$('#mode-label').textContent=mode==='spar'?'SPARRING':'STANDING STILL';canvas.focus({preventScroll:true});};
-function selectionChanged(){if(running)start();else{resetFighters();ui();}}
+function selectionChanged(){if(onlineMode){network.send({type:'choose',kind:selected,map:currentMap});return;}if(running)start();else{resetFighters();ui();}}
 $('#character').onchange=e=>{selected=e.target.value;selectionChanged();};
 $('#botidentity').onchange=e=>{botChoice=e.target.value;selectionChanged();};
 $('#sound').onclick=()=>{sound=!sound;if(sound){resumeAudio();tone(440,.2,'sine',.04);}$('#sound').textContent=sound?'Sound on':'Sound off';$('#sound').setAttribute('aria-pressed',String(sound));};
@@ -273,6 +280,34 @@ for(const b of document.querySelectorAll('[data-move]'))bindTouchButton(b,b.data
 $('#touch-toggle').onclick=()=>{clearInput();touchOverride=!touchUI;setTouchUI(touchOverride);};
 setTouchUI(touchCapable());
 window.matchMedia?.('(any-pointer: coarse)').addEventListener?.('change',()=>{if(touchOverride===null)setTouchUI(touchCapable());});
+const serviceURL=window.location?.hostname==='127.0.0.1'||window.location?.hostname==='localhost'?'ws://127.0.0.1:8081/play':'wss://paper-monsters-server-146189216753.us-central1.run.app/play';
+const network=new OnlineClient(serviceURL,networkEvent);
+function setArena(value){if(!arenas[value])return;currentMap=value;$('#arena').value=value;scenery();$('.stage-label').textContent=arenas[value].name;}
+function onlineEnter(message){showModes(true);document.body?.classList.toggle('practice-running',false);if(network.active)network.send({type:'leave'});clearInput();networkNotice=null;$('#room-title').textContent='Connecting…';$('#room-players').innerHTML='';$('#ready-room').hidden=true;$('#start-room').hidden=true;$('#share-room').hidden=true;resumeAudio();onlineMode=true;running=false;paused=false;onlineState=null;onlineActors=[];onlineRoom=null;$('#overlay').hidden=true;$('#pause').hidden=true;document.body?.classList.toggle('online-game',true);$('#room-panel').hidden=false;$('#scoreboard').hidden=false;network.enter({...message,kind:selected,map:currentMap});}
+function networkEvent(msg){
+ if(msg.type==='connection'){networkNotice={text:msg.status,until:Infinity};$('#network-status').textContent=msg.status;clearInput();return;}
+ if(msg.type==='error'){networkNotice={text:msg.message,until:Date.now()+5000};$('#network-status').textContent=msg.message;return;}
+ if(msg.type==='welcome'){networkNotice=null;if(!msg.resumed&&onlineRoom){onlineRoom=null;onlineState=null;running=false;$('#network-status').textContent='Your previous room expired. Choose a mode to join again.';}else $('#network-status').textContent='Connected. Waiting for real players…';return;}
+ if(msg.type==='room'){const entering=msg.room.phase==='playing'&&onlineRoom?.phase!=='playing';onlineRoom=msg.room;const me=msg.room.players.find(s=>s.id===network.id);if(me){selected=me.kind;$('#character').value=selected;}if(entering){showModes(false);paused=false;$('#pause').hidden=true;canvas.focus({preventScroll:true});}document.body?.classList.toggle('in-round',msg.room.phase==='playing');$('#session-label').textContent='ONLINE';$('#mode-label').textContent=msg.room.mode==='duel'?'1 VS 1':msg.room.mode==='ffa'?'BATTLE ROYALE':'FRIENDS';if(currentMap!==msg.room.map)setArena(msg.room.map);running=msg.room.phase==='playing';$('#room-panel').hidden=false;$('#overlay').hidden=true;$('#character').disabled=['playing','countdown'].includes(msg.room.phase);$('#arena').disabled=msg.room.mode!=='friends'||msg.room.host!==network.id||msg.room.phase!=='waiting';if(!running)clearInput();if(msg.room.phase==='waiting'){onlineState=null;onlineActors=[];p=fighter(false,selected);setupCards();}updateOnlineUI();return;}
+ if(msg.type==='state'){onlineState=msg.state;const self=msg.state.actors.find(a=>a.id===network.id);if(!self)return;const changed=p.kind!==self.kind,previous=new Map([p,...onlineActors].map(a=>[a.id,a]));netTargets=new Map(msg.state.actors.map(a=>[a.id,{x:a.x,y:a.y}]));netReceived=Date.now();p={...self};bot=msg.state.actors.find(a=>a.id!==network.id&&!a.hidden)||fighter(true,'dummy');onlineActors=msg.state.actors.filter(a=>a.id!==network.id);for(const a of [p,...onlineActors]){const old=previous.get(a.id);if(old&&!old.hidden&&!a.hidden&&Math.hypot(old.x-a.x,old.y-a.y)<250){a.x=old.x;a.y=old.y;}}projectiles=msg.state.projectiles.map(k=>({...k,volley:{owner:k.owner===network.id?p:bot}}));if(changed)setupCards();for(const event of msg.state.events){const target=msg.state.actors.find(a=>a.id===event.target);if(target&&!target.hidden)hitEffect(target,event.damage);}return;}
+}
+function updateOnlineUI(){if(!onlineRoom)return;const r=onlineRoom;$('#room-title').textContent=(r.mode==='friends'?'FRIEND ROOM '+r.code:r.mode==='duel'?'ONLINE 1 VS 1':'PUBLIC BATTLE ROYALE')+' · '+arenas[r.map].name;
+ const phase=r.phase;if(phase==='finished')showModes(true);$('#network-status').textContent=phase==='finished'?(r.winner?(r.winner===network.id?'You won!':'Round won by '+(r.players.find(s=>s.id===r.winner)?.name||'the last fighter')):'Time expired — draw.')+' Ready up for a rematch.':phase==='playing'?'Round live. Eliminated players can spectate.':r.startsAt?'Starting in '+Math.max(0,Math.ceil((r.startsAt-Date.now())/1000))+'s · '+r.players.length+'/'+(r.mode==='duel'?2:5)+' players':r.mode==='friends'?'Share the code. Everyone chooses a fighter and taps Ready; the host starts.':'Waiting for real players… '+r.players.length+'/'+(r.mode==='duel'?2:5)+'. '+(r.mode==='ffa'?'Starts with 2–5 after up to 30 seconds; fills to 5 when possible.':'A second player is needed.');
+ $('#share-room').hidden=r.mode!=='friends';$('#ready-room').hidden=!['waiting','finished'].includes(phase);$('#ready-room').textContent=r.players.find(s=>s.id===network.id)?.ready?'Not ready':'Ready';$('#start-room').hidden=r.mode!=='friends'||r.host!==network.id||phase!=='waiting';
+ const list=$('#room-players');const html=r.players.map(s=>'<li>'+s.name+(s.id===network.id?' (you)':'')+' · '+roster[s.kind].name+' · '+(!s.connected?'reconnecting':s.ready?'ready':'not ready')+'</li>').join('');if(list.innerHTML!==html)list.innerHTML=html;
+ const score=$('#scoreboard'),scoreText=(onlineState?.actors||[]).map(a=>a.name+': '+Math.ceil(a.hp)+' HP'+(a.hp<=0?' · out':'')).join('  |  ');score.textContent=scoreText;if(networkNotice&&Date.now()<networkNotice.until)$('#network-status').textContent=networkNotice.text;
+}
+function networkFrame(dt){if(running&&!paused)stepMusic(dt);const lag=Math.min(.05,(Date.now()-netReceived)/1000);for(const a of [p,...onlineActors]){const target=netTargets.get(a.id);if(target&&!a.hidden){const alpha=1-Math.exp(-dt*35);a.x+=(target.x+(a.vx||0)*lag-a.x)*alpha;a.y+=(target.y+(a.vy||0)*lag-a.y)*alpha;}}networkTick+=dt;if(networkTick>=1/30){networkTick=0;if(onlineRoom?.phase==='playing')network.send({type:'input',x:paused?0:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),y:paused?0:Number(keys.has('KeyS')||keys.has('ArrowDown'))-Number(keys.has('KeyW')||keys.has('ArrowUp')||(p.bat>0&&keys.has('Space'))),angle:aimAngle()});}
+ if(p.kind==='assassin'&&!paused){const vertical=Number(keys.has('KeyS')||keys.has('ArrowDown'))-Number(keys.has('KeyW')||keys.has('ArrowUp'));if(vertical){aim.pointer=false;aim.elevation=Math.max(-1.35,Math.min(1.35,aim.elevation+vertical*dt*1.8));}}
+}
+function returnPractice(){network.leave();onlineMode=false;onlineRoom=null;onlineState=null;onlineActors=[];$('#room-panel').hidden=true;$('#scoreboard').hidden=true;$('#character').disabled=false;$('#arena').disabled=false;document.body?.classList.toggle('online-game',false);document.body?.classList.toggle('in-round',false);$('#session-label').textContent='PRACTICE';$('#mode-label').textContent=mode==='spar'?'SPARRING':'STANDING STILL';$('#network-status').textContent='Practice with a bot. Online modes use real players only.';start();}
+$('#mode-toggle').onclick=()=>{clearInput();showModes(!menuOpen);};
+$('#practice-mode').onclick=returnPractice;$('#leave-room').onclick=returnPractice;
+$('#duel-mode').onclick=()=>onlineEnter({type:'queue',mode:'duel'});$('#ffa-mode').onclick=()=>onlineEnter({type:'queue',mode:'ffa'});$('#host-mode').onclick=()=>onlineEnter({type:'host'});
+$('#join-mode').onclick=()=>onlineEnter({type:'join',code:$('#room-code').value.trim().toUpperCase()});$('#ready-room').onclick=()=>network.send({type:'ready'});$('#start-room').onclick=()=>network.send({type:'start'});
+$('#arena').onchange=e=>{setArena(e.target.value);if(onlineMode)network.send({type:'choose',kind:selected,map:currentMap});else if(running)start();else{resetFighters();ui();}};
+$('#share-room').onclick=async()=>{if(!onlineRoom)return;const link='https://noam.bot/paper-monsters/?room='+onlineRoom.code;try{await window.navigator.clipboard.writeText(link);networkNotice={text:'Invite link copied.',until:Date.now()+5000};$('#network-status').textContent='Invite link copied.';}catch{networkNotice={text:'Share this room code: '+onlineRoom.code,until:Date.now()+10000};$('#network-status').textContent=networkNotice.text;}};
+try{const code=new URLSearchParams(window.location?.search||'').get('room');if(code)$('#room-code').value=code.toUpperCase().slice(0,8);}catch{}
 resetFighters();
 let lastUI=0;
-function frame(now){const dt=Math.min((now-last)/1000||0,1/30);last=now;if(running&&!paused)update(dt);else if(!paused)time+=dt;render(dt);if(now-lastUI>=80){ui();lastUI=now;}requestAnimationFrame(frame);}requestAnimationFrame(frame);
+function frame(now){const dt=Math.min((now-last)/1000||0,1/30);last=now;if(onlineMode){time+=dt;networkFrame(dt);}else if(running&&!paused)update(dt);else if(!paused)time+=dt;render(dt);if(now-lastUI>=80){ui();lastUI=now;}requestAnimationFrame(frame);}requestAnimationFrame(frame);

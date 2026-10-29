@@ -6,9 +6,9 @@ A side-view, health-based platform fighter in a layered paper-cutout style. Pape
 
 The shared identity is handmade paper: layered scenery, cutout characters, tactile textures and theatrical presentation. Vampire keeps its gothic character design and abilities. Moonlit Manor is specifically the Vampire’s arena, not the theme for every map or the whole game.
 
-Future arenas should have different settings, palettes, props and music suited to their characters. Possible directions (not final designs or implemented maps): a rugged mountain stronghold for Barbarian, and city rooftops for Assassin. Fighters can visit any arena; stage selection should be independent of fighter selection. Keep the overall menus and branding broad enough for more characters.
+Three selectable arenas have distinct platform layouts: Moonlit Manor has balanced wings and a high perch; Broken Stronghold has stepped flanking routes and a low center; Rooftop Run has staggered narrow ledges. Fighters can visit any arena. Further visual and musical differentiation remains future work.
 
-The current three-fighter roster is ready for further human play-testing. Additional characters and maps remain future work.
+The current three-fighter roster is ready for further human play-testing. Additional characters remain future work.
 
 
 ## Run
@@ -30,13 +30,13 @@ A/D or left/right: move. Space: jump / double-jump. Vampire: J knife, K Bloodsuc
 
 ## Art/audio
 
-Original code-drawn paper scenery and articulated cutout characters, with cached procedural paper grain. Original synthesized music-box-like loop and sound effects using Web Audio; no downloaded assets or external dependencies. The earlier concept board is a direction reference, not runtime art.
+Original code-drawn paper scenery and articulated cutout characters, with cached procedural paper grain. Original synthesized music-box-like loop and sound effects using Web Audio; no downloaded art or audio assets. The earlier concept board is a direction reference, not runtime art.
 
 ## Tests and deployment
 
 `node --test paper-monsters/tests/*.test.mjs`
 
-Push to main triggers the existing Firebase Hosting workflow, copies public assets to `/paper-monsters/`, and adds a link on noam.bot. The game runs entirely in the browser; no backend or Cloud Run deployment is needed.
+Push to main triggers the existing Firebase Hosting workflow, copies public assets to `/paper-monsters/`, and adds a link on noam.bot. Practice runs in the browser. Online play requires the separately deployed authoritative Cloud Run service described below. Hosting deployments do not deploy the server.
 
 ## Assassin and practice bots
 
@@ -73,3 +73,35 @@ Touch layout activates with coarse-pointer capability, or iPadOS's MacIntel plat
 - Sound stays on by default and unlocks on entry/interaction; mute is retained. Audio resumes only through interactions. DOM HUD updates are capped near12Hz while physics and canvas retain animation-frame timing.
 
 Validation: 51 automated tests include real handler calls with multiple synthetic pointer IDs, keyboard/touch overlap, bat flight, double jump, axe/Rampage overlap, aiming-only touch, mouse firing without duplicates, input interruption and iPad desktop-UA detection. Browser checks cover768×1024,1024×768,820×1180 and1180×820 layouts,44px target sizes, no horizontal overflow, and desktop mouse/keyboard regression. These are desktop-browser viewport checks and automated input-handler tests, not physical iPad Safari or hardware multi-touch testing.
+
+## Online multiplayer
+
+Choose a fighter, then choose a mode:
+
+- **Online 1 vs 1:** waits for a real second player, then starts after a three-second countdown.
+- **Public battle royale:** 2–5 real players. After the second player joins, the lobby waits up to 30 seconds; five players shorten the countdown to three seconds. No bots fill empty slots.
+- **Host friends / Join friends:** share the eight-character room code or copy an invite link. Rooms support 2–5 players. Everyone presses Ready, then the host starts. The host chooses the map before the round.
+
+Health reaching zero eliminates a player. The last survivor wins; a three-minute round with multiple survivors is a draw. Each melee swing strikes one nearby opponent. Ready again after a round to rematch; private rooms also need the host to start again. Leaving forfeits. A network disconnect allows 15 seconds to reconnect while the fighter remains vulnerable; host ownership transfers when the host leaves. Online pause stops your inputs, but the shared match continues.
+
+The Node WebSocket server owns movement, collisions, combat, cooldowns, readiness and results. It simulates at 60 Hz and sends snapshots around 20 Hz; the browser interpolates rendering. Hidden opponents' coordinates are omitted during cloak. Player names are generated; there are no accounts or chat.
+
+### Local server and deployment
+
+Run `npm ci --prefix paper-monsters`, then `PORT=8081 npm start --prefix paper-monsters`. Run the static HTTP server on port 8080 as above. Production clients connect to `wss://paper-monsters-server-146189216753.us-central1.run.app/play`.
+
+Deploy backend changes from the repository root:
+
+```sh
+gcloud run deploy paper-monsters-server --source paper-monsters --project gen-lang-client-0448267425 --region us-central1 --allow-unauthenticated --max-instances 1 --min-instances 0 --concurrency 100 --timeout 3600 --memory 256Mi --cpu 1 --quiet
+```
+
+Then prepare `fps-game/hosting-public` using the complete Prepare hosting-public step in `.github/workflows/deploy-hosting.yml` (preserving all other games), and deploy with `firebase deploy --only hosting:noam --project gen-lang-client-0448267425 --non-interactive --config fps-game/firebase.json`. The existing GitHub hosting service account has a service-usage permission issue; local authenticated Firebase CLI deployment works. Shared combat-rule changes require both backend and frontend deployments.
+
+### Verification and limits
+
+`node --test paper-monsters/tests/*.test.mjs` covers combat, desktop/touch input, authoritative simulation, real socket room lifecycle, public queues, reconnects, rematches and invalid messages. `node paper-monsters/tests/live-smoke.mjs` explicitly exercises the deployed service and writes `LIVE-VERIFICATION.json`; it is not part of ordinary unit tests.
+
+Rooms live in memory in a single Cloud Run instance, capped at 100 connected sockets. Restarts or deployments can end rooms, and this release does not support horizontal scaling or durable reconnect across a server restart. Network latency affects responsiveness; there is no rollback or lag compensation. Cloud Run WebSocket requests have a 60-minute maximum lifetime; the client reconnects when interrupted. See [Cloud Run WebSocket guidance](https://docs.cloud.google.com/run/docs/triggering/websockets).
+
+Browser tests cover separate sessions and tablet-sized layouts. Physical iPad Safari testing and real-player balance testing remain to be done.

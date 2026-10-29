@@ -1,0 +1,8 @@
+// No accounts: a tab-scoped reconnect token permits a short reconnect to the same room.
+export class OnlineClient{
+ constructor(url,onEvent){this.url=url;this.onEvent=onEvent;this.seq=0;this.active=false;this.tries=0;this.pending=[];this.token=null;try{this.token=sessionStorage.getItem('paper-room-token');}catch{} }
+ connect(){if(this.ws&&this.ws.readyState<2)return;this.active=true;this.onEvent({type:'connection',status:'Connecting…'});const ws=this.ws=new WebSocket(this.url);ws.onopen=()=>ws.send(JSON.stringify({type:'hello',token:this.token}));ws.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch{return;}if(m.type==='welcome'){this.id=m.id;this.seq=Math.max(this.seq,m.seq);this.token=m.token;this.tries=0;this.welcomed=true;try{sessionStorage.setItem('paper-room-token',m.token);}catch{}this.onEvent(m);for(const msg of this.pending.splice(0))this.send(msg);}else this.onEvent(m);};ws.onclose=()=>{this.welcomed=false;if(!this.active)return;this.onEvent({type:'connection',status:'Connection interrupted. Reconnecting…'});if(this.tries++<6)this.retry=setTimeout(()=>this.connect(),Math.min(4000,500*this.tries));else this.onEvent({type:'connection',status:'Could not reconnect. Leave the room and try again.'});};ws.onerror=()=>{};}
+ send(msg){if(this.ws?.readyState===WebSocket.OPEN&&this.welcomed)this.ws.send(JSON.stringify({...msg,seq:++this.seq}));else if(!['input','action'].includes(msg.type)){this.pending.push(msg);this.connect();}}
+ enter(msg){this.active=true;this.send(msg);}
+ leave(){if(this.ws?.readyState===WebSocket.OPEN&&this.welcomed)this.send({type:'leave'});this.active=false;this.pending=[];clearTimeout(this.retry);this.ws?.close();this.ws=null;this.welcomed=false;}
+}

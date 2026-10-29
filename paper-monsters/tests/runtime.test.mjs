@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import * as core from '../public/core.mjs';
+import {arenas} from '../public/maps.mjs';
+import {OnlineClient} from '../public/online.mjs';
 // Run actual game handlers and simulation with only the DOM/audio/rendering boundary stubbed.
 function harness(){
  const source=fs.readFileSync(new URL('../public/game.mjs',import.meta.url),'utf8').replace(/^import .*\n/,'');
@@ -10,7 +12,7 @@ function harness(){
  const elements=new Map();const element=s=>{if(!elements.has(s))elements.set(s,{getContext:()=>context,focus(){},getBoundingClientRect:()=>({left:10,top:20,width:640,height:360}),listeners:{},addEventListener(type,fn){this.listeners[type]=fn;},style:{},classList:{toggle(){}},setAttribute(k,v){this[k]=v;}});return elements.get(s);};
  const callbacks={};let audioCreated=0;
  class Audio{constructor(){audioCreated++;}resume(){}}
- const sandbox={...core,Math,console,document:{querySelector:element,querySelectorAll:()=>[],createElement:()=>element('temp'),addEventListener(){}},window:{AudioContext:Audio,addEventListener:(key,fn)=>callbacks[key]=fn},requestAnimationFrame(){}};
+ const sandbox={...core,arenas,OnlineClient,Math,console,document:{querySelector:element,querySelectorAll:()=>[],createElement:()=>element('temp'),addEventListener(){}},window:{AudioContext:Audio,addEventListener:(key,fn)=>callbacks[key]=fn},requestAnimationFrame(){}};
  vm.createContext(sandbox);vm.runInContext(source,sandbox);
  const run=code=>vm.runInContext(code,sandbox);run('sound=false');
  return {run,element,callbacks,audioCreated:()=>audioCreated,step:(seconds)=>run(`for(let n=0;n<${Math.round(seconds*120)};n++)update(1/120);`)};
@@ -39,3 +41,4 @@ test('mouse left pointerdown aims before firing once, right click and UI control
 test('touch aims and drags without firing, ignores other aim contacts; ability launches toward selected point',()=>{const h=assassinScene(),canvas=h.element('#game');const e={pointerType:'touch',pointerId:1,button:0,clientX:477.5,clientY:306.5,preventDefault(){}};canvas.listeners.pointerdown(e);canvas.listeners.pointermove({...e,pointerId:2,clientX:50});assert.equal(h.run('aim.x'),935);assert.equal(h.run('volleys.length'),0);canvas.listeners.pointermove({...e,clientY:206.5});const expected=h.run('aimAngle()');contact(h,'fire',null,'volley')('onpointerdown',3);assert.equal(h.run('volleys[0].angle'),expected);assert.ok(expected<0);canvas.listeners.pointercancel(e);assert.equal(h.run('aimPointer'),null);});
 test('touch Rampage can overlap an axe attack and pointer cancellation never retriggers abilities',()=>{const h=barbarianScene();contact(h,'rage',null,'rampage')('onpointerdown',1);const heavy=contact(h,'heavy',null,'heavy');heavy('onpointerdown',2);h.step(.4);assert.equal(h.run('bot.hp'),75);heavy('onpointercancel',2);heavy('onlostpointercapture',2);assert.equal(h.run('bot.hp'),75);});
 test('iPad desktop UA and coarse capability enable touch UI without disabling desktop choice',()=>{const h=harness();h.run("window.navigator={platform:'MacIntel',maxTouchPoints:5,userAgent:'Macintosh'}");assert.equal(h.run('touchCapable()'),true);h.run("window.navigator={platform:'MacIntel',maxTouchPoints:0,userAgent:'Macintosh'};window.matchMedia=()=>({matches:false})");assert.equal(h.run('touchCapable()'),false);h.run('window.matchMedia=()=>({matches:true})');assert.equal(h.run('touchCapable()'),true);h.element('#touch-toggle').onclick();assert.equal(h.run('touchUI'),true);h.element('#touch-toggle').onclick();assert.equal(h.run('touchUI'),false);});
+test('online touch and keyboard input send commands without running local damage or cooldowns',()=>{const h=assassinScene();h.run("var sent=[];network.send=m=>sent.push(m);onlineMode=true;onlineRoom={phase:'playing'};running=true");const move=contact(h,'move','ArrowRight'),fire=contact(h,'fire',null,'volley');move('onpointerdown',1);fire('onpointerdown',2);h.run('networkFrame(.04)');assert.equal(h.run('p.cd.volley'),0);assert.equal(h.run('volleys.length'),0);assert.equal(h.run("sent.filter(m=>m.type==='action').length"),1);assert.equal(h.run("sent.find(m=>m.type==='input').x"),1);h.run('pauseToggle();networkFrame(.04)');assert.equal(h.run("sent.filter(m=>m.type==='input').at(-1).x"),0);});

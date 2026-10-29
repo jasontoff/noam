@@ -1,0 +1,20 @@
+// Explicit opt-in integration check against the deployed service; never run by node --test.
+import WebSocket from 'ws';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const url=process.env.MULTIPLAYER_URL||'wss://paper-monsters-server-146189216753.us-central1.run.app/play',clients=[],report={service:url,checks:[],at:new Date().toISOString()};
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+async function until(fn,limit=12000){const end=Date.now()+limit;while(Date.now()<end){const v=fn();if(v)return v;await delay(30);}throw Error('Integration timeout');}
+async function connect(){const ws=new WebSocket(url,{origin:'https://noam.bot'}),c={ws,seq:0,room:null,state:null,id:null};clients.push(c);ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='welcome'){c.id=m.id;c.seq=m.seq;}if(m.type==='room')c.room=m.room;if(m.type==='state')c.state=m.state;if(m.type==='error')throw Error(m.message);});ws.on('open',()=>ws.send(JSON.stringify({type:'hello'})));c.send=m=>ws.send(JSON.stringify({...m,seq:++c.seq}));await until(()=>c.id);return c;}
+async function group(n){const result=[];for(let i=0;i<n;i++)result.push(await connect());return result;}
+async function privateRoom(map,n){const cs=await group(n);cs[0].send({type:'host',kind:'barbarian',map});await until(()=>cs[0].room);for(const c of cs.slice(1))c.send({type:'join',code:cs[0].room.code,kind:'assassin'});await until(()=>cs[0].room.players.length===n);for(const c of cs)c.send({type:'ready'});await until(()=>cs[0].room.players.every(p=>p.ready));cs[0].send({type:'start'});await until(()=>cs.every(c=>c.state));assert.ok(cs.every(c=>c.state.map===map&&c.state.actors.length===n));report.checks.push({type:'private-start',map,players:n});return cs;}
+try{
+ const duel=await group(2);duel[0].send({type:'queue',mode:'duel',kind:'assassin'});await until(()=>duel[0].room);assert.equal(duel[0].room.phase,'waiting');assert.equal(duel[0].room.players.length,1);duel[1].send({type:'queue',mode:'duel',kind:'vampire'});await until(()=>duel.every(c=>c.state));assert.equal(duel[0].room.code,duel[1].room.code);duel[0].send({type:'action',move:'volley',angle:0});await until(()=>duel[1].state.actors.find(a=>a.id===duel[1].id).hp===78);report.checks.push({type:'public-duel',players:2,sharedVolleyDamage:12});for(const c of duel)c.send({type:'leave'});
+ const ffa=await group(5);for(const c of ffa)c.send({type:'queue',mode:'ffa',kind:'vampire'});await until(()=>ffa.every(c=>c.state));assert.ok(ffa.every(c=>c.room.players.length===5));report.checks.push({type:'public-ffa',players:5});for(const c of ffa)c.send({type:'leave'});
+ for(const [map,n]of [['stronghold',3],['rooftops',4]]){const cs=await privateRoom(map,n);for(const c of cs)c.send({type:'leave'});}
+ const combat=await privateRoom('manor',2),a=combat[0],b=combat[1];const started=Date.now();
+ while(!a.state.done&&Date.now()-started<65000){const me=a.state.actors.find(p=>p.id===a.id),enemy=a.state.actors.find(p=>p.id===b.id),dx=enemy.x-me.x;a.send({type:'input',x:Math.abs(dx)>75?Math.sign(dx):0,y:0,angle:0});if(Math.abs(dx)<140){if(me.cd.rampage===0)a.send({type:'action',move:'rampage',angle:0});if(!me.axe){if(me.cd.combo===0)a.send({type:'action',move:'combo',angle:0});else if(me.cd.heavy===0)a.send({type:'action',move:'heavy',angle:0});}}await delay(100);}
+ assert.equal(a.state.done,true);assert.equal(a.state.winner,a.id);await until(()=>b.state.done);assert.equal(b.state.winner,a.id);report.checks.push({type:'combat-to-elimination',winner:'barbarian',elapsedSeconds:Math.round((Date.now()-started)/1000),finalHP:a.state.actors.map(p=>({kind:p.kind,hp:p.hp}))});
+ for(const c of combat)c.send({type:'ready'});await until(()=>a.room.phase==='waiting'&&a.room.players.every(p=>p.ready));a.send({type:'start'});await until(()=>a.room.phase==='playing'&&!a.state.done);assert.equal(a.state.actors.find(p=>p.id===b.id).hp,80);report.checks.push({type:'rematch',healthReset:true});
+ fs.writeFileSync(new URL('../LIVE-VERIFICATION.json',import.meta.url),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+}finally{for(const c of clients)c.ws.close();}

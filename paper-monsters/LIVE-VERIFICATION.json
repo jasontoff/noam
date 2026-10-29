@@ -1,0 +1,74 @@
+{
+  "service": "wss://paper-monsters-server-146189216753.us-central1.run.app/play",
+  "checks": [
+    {
+      "type": "public-duel",
+      "players": 2,
+      "sharedVolleyDamage": 12
+    },
+    {
+      "type": "public-ffa",
+      "players": 5
+    },
+    {
+      "type": "private-start",
+      "map": "stronghold",
+      "players": 3
+    },
+    {
+      "type": "private-start",
+      "map": "rooftops",
+      "players": 4
+    },
+    {
+      "type": "private-start",
+      "map": "manor",
+      "players": 2
+    },
+    {
+      "type": "combat-to-elimination",
+      "winner": "barbarian",
+      "elapsedSeconds": 18,
+      "finalHP": [
+        {
+          "kind": "barbarian",
+          "hp": 120
+        },
+        {
+          "kind": "assassin",
+          "hp": 0
+        }
+      ]
+    },
+    {
+      "type": "rematch",
+      "healthReset": true
+    }
+  ],
+  "at": "2026-10-29T05:14:36.664Z",
+  "frontend": "https://noam.bot/paper-monsters/",
+  "backendRevision": "paper-monsters-server-00002-m9t",
+  "automatedTests": {
+    "passed": 63,
+    "failed": 0
+  },
+  "browserChecks": {
+    "separateSessions": 2,
+    "sharedDamage": 12,
+    "guestVampireHP": 78,
+    "leaveAwardsWin": true,
+    "touchAbilityConfirmed": "Bat Wings",
+    "tabletViewports": [
+      [
+        1024,
+        768
+      ],
+      [
+        768,
+        1024
+      ]
+    ],
+    "physicalIPadSafariTested": false
+  },
+  "publicFilesMatchDeployment": true
+}

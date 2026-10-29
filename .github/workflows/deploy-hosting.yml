@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install Paper Monsters test dependencies
+        run: npm ci --prefix ../paper-monsters
+
       - name: Test Paper Monsters combat rules
         run: node --test ../paper-monsters/tests/*.test.mjs
 
