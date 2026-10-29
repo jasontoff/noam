@@ -1,6 +1,15 @@
 # Paper Monsters (working title)
 
-A side-view, health-based platform fighter in a layered paper-cutout style. The game is an ensemble fighter, not a vampire-themed game. Vampire has been play-tested. The roster now includes Vampire and Assassin, plus practice bots that use those identities. Moonlit Manor remains the first character-themed stage. Barbarian is planned but has no specified moves yet; do not invent its design. Future arenas should reflect those characters, not repeat the vampire theme.
+A side-view, health-based platform fighter in a layered paper-cutout style. Paper Monsters is a working title for a growing cast of distinct fighters. The current implementation includes Vampire, Assassin and Barbarian, plus practice bots that use those identities.
+
+## Visual direction
+
+The shared identity is handmade paper: layered scenery, cutout characters, tactile textures and theatrical presentation. Vampire keeps its gothic character design and abilities. Moonlit Manor is specifically the Vampire’s arena, not the theme for every map or the whole game.
+
+Future arenas should have different settings, palettes, props and music suited to their characters. Possible directions (not final designs or implemented maps): a rugged mountain stronghold for Barbarian, and city rooftops for Assassin. Fighters can visit any arena; stage selection should be independent of fighter selection. Keep the overall menus and branding broad enough for more characters.
+
+The current three-fighter roster is ready for further human play-testing. Additional characters and maps remain future work.
+
 
 ## Run
 
@@ -32,9 +41,22 @@ Push to main triggers the existing Firebase Hosting workflow, copies public asse
 ## Assassin and practice bots
 
 - Assassin: 80 starting/max HP, no healing ability.
-- Katana: 5 damage, 115px melee reach (plus target body radius), 1.5s cooldown.
-- Dagger: 43px reach, 3s cooldown; 1 damage in front of target, 15 from behind according to target facing. Gold cross-cut effects and BACKSTAB text distinguish rear hits.
-- Throwing knives: 7s cooldown. Three projectiles spaced 0.14s apart, 680px/s with 1.35s lifetime. Aim is locked at activation. Successful hits within a volley deal 3, 4, then 5; misses do not increment the hit count. Projectiles use swept collision checks and pass through one-way platforms.
-- Fighter and opponent selectors reset the round; random opponent chooses Vampire or Assassin on each reset. No Barbarian placeholder.
-- Bot: 0.8s reaction to a player moving behind it, 0.6s visible windup, 2.8s post-attack recovery. Vampire bot alternates knife/Bloodsuck; Assassin bot alternates katana/throwing knives. Bots use two attacks to keep practice readable, not the full player kit. Bot projectile aim is fixed when windup begins so the player can dodge. Standing-still mode keeps the bot's facing and cancels outstanding bot activity/projectiles.
+- Katana: 5 damage, 115px melee reach (plus target body radius), 3s cooldown.
+- Dagger: 43px reach, 5s cooldown; 1 damage in front of target, 15 from behind according to target facing. Gold cross-cut effects and BACKSTAB text distinguish rear hits.
+- Throwing knives: 12s cooldown. Three projectiles spaced 0.14s apart, 680px/s with 1.35s lifetime. Aim is locked at activation. Successful hits within a volley deal 3, 4, then 5; misses do not increment the hit count. Projectiles use swept collision checks and pass through one-way platforms.
+- Fighter and opponent selectors reset the round; random opponent chooses Vampire, Assassin, or Barbarian on each reset.
+- Bot: 0.8s reaction to a player moving behind it, 0.6s visible windup, 2.8s post-attack recovery. Vampire bot alternates knife/Bloodsuck; Assassin bot alternates katana/throwing knives. Vampire and Assassin bots use two attacks to keep practice readable; Barbarian bot uses both axe attacks and Rampage. Bot projectile aim is fixed when windup begins so the player can dodge. Standing-still mode keeps the bot's facing and cancels outstanding bot activity/projectiles.
 - Sound remains enabled by default, activated by entering the stage; mute remains available.
+
+## Barbarian
+
+120 starting/max HP. Base movement 216px/s (10% slower than the other fighters' 240px/s). Three abilities only; no generic knife.
+
+- J — Cleaving Strike: 10 damage, 150px forward reach plus target radius, 0.45s visible windup, 0.8s total action. Speed is 55% of the current base during this action. Cooldown 5s from activation.
+- K — Axe Tempest: five alternating sweeps that cover both sides with 135px reach plus target radius. Impacts at 0.35, 0.85, 1.35, 1.85 and 2.35s; action ends at 2.65s. Successful hits escalate 2,4,6,8,10 (30 maximum before modifiers). Misses do not advance the count. Movement is 30% of current base, no new jumps, no hit-stun applied to opponents. Cooldown 45s from activation.
+- L — Rampage: lasts 3s, can overlap either axe action. Damage dealt ×1.5, damage received ×0.8, base movement 264px/s (10% faster than other fighters); axe movement restrictions still apply. No damage rounding is applied by these modifiers. Cooldown 60s from activation.
+- If no damage was dealt during Rampage: cancel outstanding axe action, stun 3s, then move at 55% base speed for a full 5s. A single successful damage event during Rampage prevents both penalties.
+
+## Balance validation
+
+See `balance/REPORT.md` and the reproducible `balance/simulate.mjs`. This uses the actual runtime update/physics/attacks with scripted player inputs in both engine slots; it does not infer human competitive balance from DPS alone.

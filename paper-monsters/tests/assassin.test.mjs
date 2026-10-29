@@ -4,7 +4,7 @@ import {fighter,activate,tickTimers,daggerHit,newVolley,volleyHit,projectileHits
 test('Assassin has 80 HP and exactly three attacks, with independent cooldowns',()=>{
  const p=fighter(false,'assassin');assert.equal(p.hp,80);assert.equal(p.max,80);assert.deepEqual(Object.keys(p.cd),['katana','dagger','volley']);
  for(const invalid of ['knife','blood','cloak','bat','unknown'])assert.equal(activate(p,invalid),false);
- assert.ok(activate(p,'katana'));assert.equal(p.cd.katana,1.5);assert.equal(activate(p,'dagger'),false);tickTimers(p,.25);assert.ok(activate(p,'dagger'));assert.equal(p.cd.dagger,3);tickTimers(p,.25);assert.ok(activate(p,'volley'));assert.equal(p.cd.volley,7);
+ assert.ok(activate(p,'katana'));assert.equal(p.cd.katana,3);assert.equal(activate(p,'dagger'),false);tickTimers(p,.25);assert.ok(activate(p,'dagger'));assert.equal(p.cd.dagger,5);tickTimers(p,.25);assert.ok(activate(p,'volley'));assert.equal(p.cd.volley,12);
 });
 test('backstab uses the target facing, from either side; front deals 1, rear 15',()=>{
  for(const facing of [-1,1]){

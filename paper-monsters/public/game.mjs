@@ -1,4 +1,4 @@
-import {platforms,fighter,tickTimers,damage,activate,bloodHit,finishLunge,knifeHit,radius,bodyHeight,roster,cooldowns,daggerHit,newVolley,volleyHit,projectileHits,botBrain,thinkBot} from './core.mjs';
+import {platforms,fighter,tickTimers,damage,activate,bloodHit,finishLunge,knifeHit,radius,bodyHeight,roster,cooldowns,daggerHit,newVolley,volleyHit,projectileHits,botBrain,thinkBot,moveSpeed,stepAxe} from './core.mjs';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d');
 const $=s=>document.querySelector(s);
 let p=fighter(),bot=fighter(true,'vampire'),running=false,paused=false,mode='spar',time=0,last=0,shake=0;
@@ -92,7 +92,32 @@ function assassin(a){
  else if(a.attackType!=='volley'||!thrust){const tip=thrust?95:39;poly([[hand+4,-36],[tip,-60],[tip+7,-65],[tip+1,-53],[hand+8,-29]],'#d3dac4','#f1e0b8');line(hand,-42,hand+13,-26,'#bba277',4);}
  poly([[-16,-63],[-22,-57],[-12,-42],[-4,-43]],'#2b3b40');ctx.restore();
 }
-function drawFighter(a){a.kind==='assassin'?assassin(a):vampire(a);}
+function barbarian(a){
+ const walk=Math.sin(time*10)*Math.min(Math.abs(a.vx)/150,1);
+ ctx.save();ctx.translate(a.x,a.y);ctx.scale(a.dir,1);
+ poly([[-21,-30],[-5,-29],[-5+walk*7,-6],[-24+walk*7,0],[-25+walk*7,-8]],'#4b3730');
+ poly([[5,-30],[21,-29],[22-walk*7,-7],[34-walk*7,0],[8-walk*7,0]],'#594134');
+ poly([[-27,-72],[23,-72],[32,-30],[-29,-28]],a.rampage>0?'#995541':'#8f6b4b','#bd9c72');
+ poly([[-24,-73],[-14,-61],[0,-68],[13,-60],[26,-73],[16,-81],[-17,-80]],'#c7b18a');
+ poly([[-24,-39],[29,-40],[31,-30],[-28,-28]],'#46352c');poly([[-5,-41],[7,-41],[8,-28],[-5,-28]],'#baa170');
+ poly([[-17,-99],[10,-104],[21,-91],[18,-71],[-14,-69],[-24,-85]],'#d5ae7d');
+ poly([[-20,-86],[-12,-80],[-3,-83],[8,-79],[17,-86],[18,-70],[3,-53],[-17,-67]],'#6c4635');
+ poly([[-23,-94],[-16,-109],[10,-111],[24,-96],[15,-90],[-13,-92]],'#8b8d7a','#c7c4a1');
+ poly([[-19,-100],[-31,-109],[-35,-121],[-25,-115],[-11,-103]],'#d0c5a2');poly([[17,-101],[30,-111],[33,-121],[24,-116],[9,-103]],'#d0c5a2');
+ line(-8,-86,0,-86,'#332a29',2);line(8,-86,15,-86,'#332a29',2);
+ poly([[-25,-65],[-36,-55],[-28,-35],[-18,-38],[-14,-56]],'#b78e61');
+ poly([[19,-65],[30,-61],[35,-42],[24,-36],[15,-52]],'#c49b6c');
+ // Raised axe during windup, then broad alternating cut-paper sweeps.
+ ctx.save();ctx.translate(26,-47);
+ let angle=a.axeFlash>0?(a.axeSide*a.dir<0?-1.45:1.2):a.axe?-.95:-.3;
+ ctx.rotate(angle);line(0,18,0,-67,'#51382c',7);line(-2,16,-2,-65,'#ac8761',2);
+ poly([[-3,-67],[-27,-79],[-38,-61],[-31,-40],[-6,-48]],a.rampage>0?'#e3b574':'#aeb6a5','#e4d7b6');
+ poly([[3,-67],[24,-77],[35,-60],[29,-42],[4,-48]],a.rampage>0?'#c28753':'#808e87','#d0c9ab');ctx.restore();ctx.restore();
+ if(a.rampage>0){ctx.save();ctx.setLineDash([9,5]);ctx.strokeStyle='#e1a46a';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(a.x,a.y-52,48,66,0,0,7);ctx.stroke();ctx.restore();}
+ if(a.axe){ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.fillStyle='#e7bb84';ctx.fillText(a.axe.type==='heavy'?'WINDUP':`AXE TEMPEST · ${a.axe.swings}/5`,a.x,a.y-142);}
+ if(a.axeFlash>0){ctx.save();ctx.translate(a.x,a.y-45);ctx.scale(a.axeSide,1);ctx.beginPath();ctx.arc(0,0,132,-.95,.95);ctx.strokeStyle=a.rampage>0?'#edb56aaa':'#d5d2b7aa';ctx.lineWidth=6;ctx.stroke();ctx.restore();}
+}
+function drawFighter(a){a.kind==='assassin'?assassin(a):a.kind==='barbarian'?barbarian(a):vampire(a);}
 function aimAngle(){if(aim.pointer)return Math.atan2(aim.y-(p.y-42),aim.x-p.x);return p.dir===1?aim.elevation:Math.PI-aim.elevation;}
 function drawAim(){if(p.kind!=='assassin'||!running)return;const angle=aimAngle(),x=p.x,y=p.y-42;
  ctx.save();ctx.setLineDash([5,7]);line(x,y,x+Math.cos(angle)*155,y+Math.sin(angle)*155,'#bdd5b38c',1.5);ctx.setLineDash([]);
@@ -101,16 +126,18 @@ function textLabel(x,y,text,color='#f1ddba'){labels.push({x,y,text,color,life:1.
 function burst(x,y,color,n=10){for(let i=0;i<n;i++)particles.push({x,y,vx:rand(-120,120),vy:rand(-150,20),life:rand(.25,.7),color,rot:rand(0,6)});}
 function tone(freq,duration,type='triangle',vol=.06,slide=1){if(!sound||!audio)return;const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(25,freq*slide),audio.currentTime+duration);g.gain.setValueAtTime(vol,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}
 function noise(duration=.12,vol=.06){if(!sound||!audio)return;let b=audio.createBuffer(1,audio.sampleRate*duration,audio.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);let s=audio.createBufferSource(),g=audio.createGain(),f=audio.createBiquadFilter();s.buffer=b;f.type='lowpass';f.frequency.value=1600;g.gain.value=vol;s.connect(f);f.connect(g);g.connect(audio.destination);s.start();}
-function hitEffect(target,n){burst(target.x,target.y-bodyHeight(target)/2,'#c28d83');textLabel(target.x,target.y-bodyHeight(target)-10,'−'+n,'#f3b1a4');shake=5;noise();tone(90,.1,'triangle',.06,.4);}
+function hitEffect(target,n){burst(target.x,target.y-bodyHeight(target)/2,'#c28d83');textLabel(target.x,target.y-bodyHeight(target)-10,'−'+Number(n.toFixed(2)),'#f3b1a4');shake=5;noise();tone(90,.1,'triangle',.06,.4);}
 function overlap(a,b,reach){return Math.abs(a.x-b.x)<reach+radius(b)&&Math.abs((a.y-bodyHeight(a)/2)-(b.y-bodyHeight(b)/2))<(bodyHeight(a)+bodyHeight(b))*.5;}
 function attackWith(a,target,type,angle){if(!activate(a,type))return false;
  if(['knife','katana','dagger'].includes(type)){
   noise(.08,.03);const reach=type==='katana'?115:type==='dagger'?43:70;
   if((target.x-a.x)*a.dir>=-5&&overlap(a,target,reach)){
-   if(type==='dagger'){const result=daggerHit(a,target);hitEffect(target,result.dealt);if(result.backstab){textLabel(target.x,target.y-130,'BACKSTAB! · 15','#f4d48b');burst(target.x,target.y-45,'#e6bc74',25);shake=11;tone(760,.22,'triangle',.06,.5);}}
-   else hitEffect(target,type==='katana'?damage(target,5):knifeHit(a,target));
+   if(type==='dagger'){const result=daggerHit(a,target);hitEffect(target,result.dealt);if(result.backstab){textLabel(target.x,target.y-130,'BACKSTAB! · '+Number(result.dealt.toFixed(2)),'#f4d48b');burst(target.x,target.y-45,'#e6bc74',25);shake=11;tone(760,.22,'triangle',.06,.5);}}
+   else hitEffect(target,type==='katana'?damage(target,5,a):knifeHit(a,target));
   }
  }
+ if(type==='heavy'||type==='combo'){tone(130,.2,'triangle',.05,.7);}
+ if(type==='rampage'){burst(a.x,a.y-50,'#d39a5c',25);tone(95,.45,'sawtooth',.035,1.8);}
  if(type==='blood'){tone(220,.18,'triangle',.05,.4);burst(a.x,a.y-35,'#aa6573',5);}
  if(type==='cloak'){burst(a.x,a.y-40,'#bba9c7',22);tone(420,.5,'sine',.045,.4);}
  if(type==='bat'){burst(a.x,a.y-40,'#c3a3b5',25);tone(300,.3,'triangle',.06,2);}
@@ -130,7 +157,7 @@ function stepLunge(a,target,dt){if(a.lunge<=0)return;
  if(overlap(a,target,37)&&!a.lungeHit){const r=bloodHit(a,target);hitEffect(target,r.dealt);if(r.healed>0){textLabel(a.x,a.y-110,'+'+r.healed,'#c4d5a8');tone(620,.24,'sine',.04,1.5);}burst(a.x,a.y-40,'#8eac83',8);}
  a.lunge-=dt;if(a.lunge<=0){finishLunge(a);a.vx=0;if(a.stun>0){textLabel(a.x,a.y-115,'MISSED · STUNNED','#decba6');tone(100,.15,'triangle',.035,.65);}}
 }
-function jump(a){if(a.bat>0||a.stun>0||a.jumps>=2)return;a.vy=-660;a.ground=false;a.jumps++;if(a===p)tone(180,.09,'sine',.025,1.5);burst(a.x,a.y,'#b9a88b',5);}
+function jump(a){if(a.bat>0||a.stun>0||a.jumps>=2||a.axe?.type==='combo')return;a.vy=-660;a.ground=false;a.jumps++;if(a===p)tone(180,.09,'sine',.025,1.5);burst(a.x,a.y,'#b9a88b',5);}
 function physics(a,dt){let oldY=a.y;
  if(a===p&&a.bat>0){a.vx=((keys.has('KeyD')||keys.has('ArrowRight'))-(keys.has('KeyA')||keys.has('ArrowLeft')))*285;a.vy=((keys.has('KeyS')||keys.has('ArrowDown'))-(keys.has('KeyW')||keys.has('ArrowUp')||keys.has('Space')))*260;}
  else a.vy+=1250*dt;
@@ -138,26 +165,28 @@ function physics(a,dt){let oldY=a.y;
  if(a.bat>0){a.y=Math.max(135,Math.min(610,a.y));}
  else{a.ground=false;if(a.vy>=0)for(const plat of platforms){if(a.x+18>plat.x&&a.x-18<plat.x+plat.w&&oldY<=plat.y+1&&a.y>=plat.y){a.y=plat.y;a.vy=0;a.ground=true;a.jumps=0;break;}}
  if(a.y>690){a.y=615;a.vy=0;a.ground=true;a.jumps=0;}}
- if(!a.bot&&Math.abs(a.vx)>1&&a.lunge<=0)a.dir=Math.sign(a.vx);
+ if(!a.bot&&!a.axe&&Math.abs(a.vx)>1&&a.lunge<=0)a.dir=Math.sign(a.vx);
 }
 function update(dt){time+=dt;tickTimers(p,dt);tickTimers(bot,dt);
  if(p.kind==='assassin'){
   const vertical=(keys.has('KeyS')||keys.has('ArrowDown'))-(keys.has('KeyW')||keys.has('ArrowUp'));
   if(vertical){aim.pointer=false;aim.elevation=Math.max(-1.35,Math.min(1.35,aim.elevation+vertical*dt*1.8));}
  }
- if(p.stun>0)p.vx=0;else if(p.lunge>0)p.vx=p.dir*980;else p.vx=((keys.has('KeyD')||keys.has('ArrowRight'))-(keys.has('KeyA')||keys.has('ArrowLeft')))*240;
+ if(p.stun>0)p.vx=0;else if(p.lunge>0)p.vx=p.dir*980;else p.vx=((keys.has('KeyD')||keys.has('ArrowRight'))-(keys.has('KeyA')||keys.has('ArrowLeft')))*moveSpeed(p);
  bot.vx=0;
  if(mode==='spar'){
   const action=thinkBot(brain,bot,p,dt);
+  if(bot.kind==='barbarian'&&brain.pending&&bot.cd.rampage===0)attackWith(bot,p,'rampage',0);
   if(action)attackWith(bot,p,action,brain.aim);
   const dx=p.x-bot.x,dy=p.y-bot.y;
   if(p.cloak===0&&!brain.pending&&bot.stun===0&&bot.lunge<=0&&dx*bot.dir>0){
-   if(Math.abs(dx)>72)bot.vx=bot.dir*120;
+   if(Math.abs(dx)>72)bot.vx=bot.dir*moveSpeed(bot)*.5;
    if(bot.ground&&dy<-55&&brain.jump===0){jump(bot);brain.jump=.95;}
   }
  }
  if(bot.lunge>0)bot.vx=bot.dir*980;
  physics(p,dt);physics(bot,dt);stepLunge(p,bot,dt);stepLunge(bot,p,dt);stepProjectiles(dt);
+ for(const [attacker,target]of [[p,bot],[bot,p]])for(const result of stepAxe(attacker,target,dt)){noise(.15,.05);if(result.hit){hitEffect(target,result.dealt);burst(target.x,target.y-45,'#d6b27b',15);shake=7;}else burst(attacker.x+result.side*100,attacker.y-40,'#968775',5);}
  if(p.hp<=0||bot.hp<=0)endRound();
  musicClock-=dt;if(musicClock<=0){musicClock=.4;const melody=[293.66,0,440,349.23,0,329.63,261.63,0,293.66,0,523.25,440,349.23,0,329.63,0];let f=melody[musicStep++%melody.length];if(f)tone(f,.35,'sine',.018,.998);if(musicStep%4===0)tone(73.42,.55,'triangle',.012);}
 }
@@ -170,7 +199,7 @@ function render(dt){ctx.clearRect(0,0,1280,720);ctx.save();if(shake>0){ctx.trans
  for(const a of [p,bot])if(a.backstab>0){ctx.save();ctx.strokeStyle='#f0c57a';ctx.lineWidth=3;const size=35+(1-a.backstab/.5)*45;line(a.x-size/2,a.y-40-size/2,a.x+size/2,a.y-40+size/2,'#f0c57a',3);line(a.x-size/2,a.y-40+size/2,a.x+size/2,a.y-40-size/2,'#f0c57a',3);ctx.restore();}
  for(const k of projectiles){ctx.save();ctx.translate(k.x,k.y);ctx.rotate(Math.atan2(k.vy,k.vx));poly([[-13,-3],[12,0],[-13,3],[-8,0]],k.volley.owner===p?'#d7dfbb':'#d9a286');ctx.restore();}
  if(p.lunge>0){for(let i=1;i<5;i++)line(p.x-p.dir*(30+i*12),p.y-50+i*7,p.x-p.dir*(60+i*18),p.y-50+i*7,'#b16a7c88',3);}
- if(p.attack>0){ctx.save();ctx.translate(p.x,p.y-45);ctx.scale(p.dir,1);ctx.beginPath();ctx.arc(22,0,p.attackType==='katana'?95:p.attackType==='dagger'?36:57,-.8,.7);ctx.strokeStyle='#ead7b2aa';ctx.lineWidth=3;ctx.stroke();ctx.restore();}
+ if(p.attack>0&&p.kind!=='barbarian'&&p.attackType!=='volley'){ctx.save();ctx.translate(p.x,p.y-45);ctx.scale(p.dir,1);ctx.beginPath();ctx.arc(22,0,p.attackType==='katana'?95:p.attackType==='dagger'?36:57,-.8,.7);ctx.strokeStyle='#ead7b2aa';ctx.lineWidth=3;ctx.stroke();ctx.restore();}
  if(p.stun>0){for(let i=0;i<3;i++){const angle=time*8+i*2.1;ctx.fillStyle='#e5c58d';ctx.fillRect(p.x+Math.cos(angle)*23,p.y-116+Math.sin(angle)*5,5,5);}}
  if(p.bat>0){ctx.font='12px Arial';ctx.fillStyle='#e2cbb9';ctx.textAlign='center';ctx.fillText(p.bat.toFixed(1)+'s',p.x,p.y-52);}
  if(!paused){for(const a of particles){a.life-=dt;a.x+=a.vx*dt;a.y+=a.vy*dt;a.vy+=260*dt;}for(const l of labels){l.life-=dt;l.y-=26*dt;}}
@@ -179,37 +208,40 @@ function render(dt){ctx.clearRect(0,0,1280,720);ctx.save();if(shake>0){ctx.trans
  for(const l of labels){ctx.globalAlpha=Math.min(1,l.life*3);ctx.font='bold 16px Georgia';ctx.fillStyle=l.color;ctx.textAlign='center';ctx.fillText(l.text,l.x,l.y);}ctx.globalAlpha=1;ctx.restore();
 }
 const moveInfo={
+ heavy:['Cleaving Strike','J','⚒','Raise the axe. Strike hard.','10 damage · long reach','5s cooldown'],
+ combo:['Axe Tempest','K','↔','Five sweeping axe cuts.','Hits: 2 → 4 → 6 → 8 → 10','45s cooldown'],
+ rampage:['Rampage','L','✹','Three seconds of fury.','1.5× damage · 20% defense','60s cooldown'],
  knife:['Knife','J','↗','A quick cut.','3 damage','2s cooldown'],
  blood:['Bloodsuck','K','♦','Lunge, bite, replenish.','5 damage · +5 HP','5s cooldown'],
  cloak:['Dark Cloak','L','◌','Disappear for 3 seconds.','Half damage & healing','20s cooldown'],
  bat:['Bat Wings','I','⋈','Fly for 10 seconds.','Smaller · 1.5× damage taken','30s after bat form'],
- katana:['Katana','J','╱','A long, sweeping cut.','5 damage · long reach','1.5s cooldown'],
- dagger:['Dagger','K','✦','Find their blind side.','1 front · 15 from behind','3s cooldown'],
- volley:['Throwing Knives','L','⋙','Aim. Release three knives.','Successful hits: 3 → 4 → 5','7s cooldown']
+ katana:['Katana','J','╱','A long, sweeping cut.','5 damage · long reach',cooldowns.katana+'s cooldown'],
+ dagger:['Dagger','K','✦','Find their blind side.','1 front · 15 from behind',cooldowns.dagger+'s cooldown'],
+ volley:['Throwing Knives','L','⋙','Aim. Release three knives.','Successful hits: 3 → 4 → 5',cooldowns.volley+'s cooldown']
 };
-function setupCards(){const abilities=$('.abilities');abilities.classList.toggle('assassin',p.kind==='assassin');
- abilities.innerHTML=roster[p.kind].moves.map(key=>{const m=moveInfo[key];return `<button class="ability ${p.kind==='assassin'?'assassin-move':key==='blood'?'blood':''}" data-ability="${key}"><div class="ability-top"><span class="glyph">${m[2]}</span><kbd>${m[1]}</kbd></div><h3>${m[0]}</h3><p>${m[3]}<br><b>${m[4]}</b></p><footer><span>${m[5]}</span><strong>READY</strong></footer><div class="cooldown"></div></button>`;}).join('');
+function setupCards(){const abilities=$('.abilities');abilities.classList.toggle('assassin',p.kind!=='vampire');
+ abilities.innerHTML=roster[p.kind].moves.map(key=>{const m=moveInfo[key];return `<button class="ability ${p.kind==='assassin'?'assassin-move':p.kind==='barbarian'?'barbarian-move':key==='blood'?'blood':''}" data-ability="${key}"><div class="ability-top"><span class="glyph">${m[2]}</span><kbd>${m[1]}</kbd></div><h3>${m[0]}</h3><p>${m[3]}<br><b>${m[4]}</b></p><footer><span>${m[5]}</span><strong>READY</strong></footer><div class="cooldown"></div></button>`;}).join('');
  for(const b of document.querySelectorAll('[data-ability]'))b.onclick=()=>use(b.dataset.ability);
- $('#rules').textContent=p.kind==='assassin'?'Assassin · 80 HP. Point or tap inside the arena to aim, then press L or the Throwing Knives card. Keyboard: W/S or ↑/↓ tilt the guide; A/D sets facing. A volley locks its aim when fired. Misses never advance its 3 → 4 → 5 hit sequence. Dagger backstabs require the enemy to face away. Changing fighter or opponent resets the round.':'Vampire · Bloodsuck misses stun for 0.5s. Face your target to lunge. Cloak permits attacks: knife deals 2; Bloodsuck deals & heals 3. Bat form locks attacks, while cooldowns keep ticking; its 30s cooldown begins when transformation ends. Changing fighter or opponent resets the round.';
+ $('#rules').textContent=p.kind==='barbarian'?'Barbarian · 120 HP. Cleaving Strike winds up for 0.45s before its impact. Axe Tempest sweeps both sides five times over 2.65s; misses do not advance damage. Move slowly; no new jumps during the combo. Rampage permits axe attacks: +50% damage, −20% incoming damage, faster movement for 3s. Deal no damage during Rampage: 3s stun, THEN 5s slowness. All three cooldowns start on activation.':p.kind==='assassin'?'Assassin · 80 HP. Point or tap inside the arena to aim, then press L or the Throwing Knives card. Keyboard: W/S or ↑/↓ tilt the guide; A/D sets facing. A volley locks its aim when fired. Misses never advance its 3 → 4 → 5 hit sequence. Dagger backstabs require the enemy to face away. Changing fighter or opponent resets the round.':'Vampire · Bloodsuck misses stun for 0.5s. Face your target to lunge. Cloak permits attacks: knife deals 2; Bloodsuck deals & heals 3. Bat form locks attacks, while cooldowns keep ticking; its 30s cooldown begins when transformation ends. Changing fighter or opponent resets the round.';
 }
 function ui(){const fmt=n=>Number.isInteger(n)?n:n.toFixed(1);$('#pname').textContent=roster[p.kind].name.toUpperCase();$('#bname').textContent=roster[bot.kind].name.toUpperCase()+' BOT';$('#php').textContent=fmt(p.hp)+' / '+p.max;$('#bhp').textContent=fmt(bot.hp)+' / '+bot.max;$('#pbar').style.width=(p.hp/p.max*100)+'%';$('#bbar').style.width=(bot.hp/bot.max*100)+'%';$('#startmark').style.display=p.kind==='vampire'?'block':'none';
- $('#pstatus').textContent=p.bat>0?'BAT FORM · '+p.bat.toFixed(1)+'s · 1.5× incoming damage':p.stun>0?'STUNNED · '+p.stun.toFixed(1)+'s':p.cloak>0?'INVISIBLE · '+p.cloak.toFixed(1)+'s · half damage & healing':p.kind==='vampire'?'90 starting HP · 110 maximum':'80 HP · precision & positioning';
- $('#bstatus').textContent=p.cloak>0?'Lost sight of you…':mode==='dummy'?'Standing still · facing '+(bot.dir===1?'right':'left'):brain.pending?'WINDUP · '+moveInfo[brain.pending][0]:brain.turn>0?'Turning… backstab window':brain.recovery>0?'Recovering · '+brain.recovery.toFixed(1)+'s':'Watching for an opening';
- for(const b of document.querySelectorAll('[data-ability]')){let key=b.dataset.ability,active=key==='bat'?p.bat:key==='cloak'?p.cloak:0;b.querySelector('strong').textContent=active>0?active.toFixed(1)+'s ACTIVE':p.bat>0?'BAT FORM':p.cd[key]>0?p.cd[key].toFixed(1)+'s':p.stun>0?'STUNNED':'READY';b.querySelector('.cooldown').style.width=100*p.cd[key]/cooldowns[key]+'%';b.classList.toggle('locked',p.bat>0||p.cd[key]>0||p.stun>0);b.classList.toggle('active',active>0);}
- $('#hint').textContent=p.bat>0?'Fly with WASD / arrows. Attacks recharge while you fly.':p.cloak>0?'The bot cannot see you. Your ghost is visible only to you.':p.kind==='assassin'?'Point / tap to aim · W/S adjusts aim · L throws three knives':'Face your target to lunge. Space twice to double-jump.';
+ $('#pstatus').textContent=p.bat>0?'BAT FORM · '+p.bat.toFixed(1)+'s · 1.5× incoming damage':p.stun>0?'STUNNED · '+p.stun.toFixed(1)+'s':p.cloak>0?'INVISIBLE · '+p.cloak.toFixed(1)+'s · half damage & healing':p.rampage>0?'RAMPAGE · '+p.rampage.toFixed(1)+'s'+(p.rampageHit?' · HIT CONFIRMED':' · LAND A HIT'):p.slow>0?'SLOWED · '+p.slow.toFixed(1)+'s':p.kind==='vampire'?'90 starting HP · 110 maximum':p.kind==='barbarian'?'120 HP · heavy axe & controlled fury':'80 HP · precision & positioning';
+ $('#bstatus').textContent=p.cloak>0?'Lost sight of you…':bot.stun>0?'STUNNED · '+bot.stun.toFixed(1)+'s':bot.rampage>0?'RAMPAGE · '+bot.rampage.toFixed(1)+'s':mode==='dummy'?'Standing still · facing '+(bot.dir===1?'right':'left'):brain.pending?'WINDUP · '+moveInfo[brain.pending][0]:brain.turn>0?'Turning… backstab window':brain.recovery>0?'Recovering · '+brain.recovery.toFixed(1)+'s':'Watching for an opening';
+ for(const b of document.querySelectorAll('[data-ability]')){let key=b.dataset.ability,active=key==='bat'?p.bat:key==='cloak'?p.cloak:key==='rampage'?p.rampage:0;b.querySelector('strong').textContent=active>0?active.toFixed(1)+'s ACTIVE':p.bat>0?'BAT FORM':p.cd[key]>0?p.cd[key].toFixed(1)+'s':p.stun>0?'STUNNED':'READY';b.querySelector('.cooldown').style.width=100*p.cd[key]/cooldowns[key]+'%';b.classList.toggle('locked',p.bat>0||p.cd[key]>0||p.stun>0);b.classList.toggle('active',active>0);}
+ $('#hint').textContent=p.bat>0?'Fly with WASD / arrows. Attacks recharge while you fly.':p.cloak>0?'The bot cannot see you. Your ghost is visible only to you.':p.kind==='barbarian'?'J heavy strike · K Axe Tempest · L Rampage — land a hit!':p.kind==='assassin'?'Point / tap to aim · W/S adjusts aim · L throws three knives':'Face your target to lunge. Space twice to double-jump.';
 }
 function resumeAudio(){if(!sound)return;audio??=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}
-function resetFighters(){p=fighter(false,selected);const identity=botChoice==='random'?(Math.random()<.5?'vampire':'assassin'):botChoice;bot=fighter(true,identity);brain=botBrain();particles=[];labels=[];projectiles=[];volleys=[];keys.clear();aim={pointer:false,x:950,y:570,elevation:0};setupCards();}
+function resetFighters(){p=fighter(false,selected);const identity=botChoice==='random'?(['vampire','assassin','barbarian'][Math.floor(Math.random()*3)]):botChoice;bot=fighter(true,identity);brain=botBrain();particles=[];labels=[];projectiles=[];volleys=[];keys.clear();aim={pointer:false,x:950,y:570,elevation:0};setupCards();}
 function start(){resumeAudio();resetFighters();running=true;paused=false;$('#overlay').hidden=true;$('#pause').hidden=true;$('#pausebutton').textContent='Ⅱ';canvas.focus({preventScroll:true});}
 function endRound(){running=false;keys.clear();const won=bot.hp<=0;$('#overlay').innerHTML='<div class="ticket"><span class="eyebrow">REHEARSAL COMPLETE</span><h2>'+ (won?'A well-earned victory.':'One more rehearsal?')+'</h2><p>'+(won?'Your practice opponent takes a bow.':'Every fighter starts with practice.')+'<br>Reset and try another approach.</p><button id="again">Play again →</button><small>YOUR ABILITIES AND HEALTH WILL RESET</small></div>';$('#overlay').hidden=false;$('#again').onclick=start;tone(won?587:196,.6,'triangle',.05,won?1.5:.5);}
 function pauseToggle(){if(!running)return;paused=!paused;keys.clear();$('#pause').hidden=!paused;$('#pausebutton').textContent=paused?'▶':'Ⅱ';}
 $('#play').onclick=start;$('#reset').onclick=start;$('#pausebutton').onclick=pauseToggle;$('#pause').onclick=pauseToggle;
-$('#botmode').onchange=e=>{mode=e.target.value;brain=botBrain();bot.vx=0;bot.lunge=0;projectiles=[];volleys=[];$('#mode-label').textContent=mode==='spar'?'SPARRING':'STANDING STILL';canvas.focus({preventScroll:true});};
+$('#botmode').onchange=e=>{mode=e.target.value;brain=botBrain();bot.vx=0;bot.lunge=0;bot.axe=null;bot.rampage=0;bot.slow=0;bot.stun=0;bot.penaltyStun=0;projectiles=[];volleys=[];$('#mode-label').textContent=mode==='spar'?'SPARRING':'STANDING STILL';canvas.focus({preventScroll:true});};
 function selectionChanged(){if(running)start();else{resetFighters();ui();}}
 $('#character').onchange=e=>{selected=e.target.value;selectionChanged();};
 $('#botidentity').onchange=e=>{botChoice=e.target.value;selectionChanged();};
 $('#sound').onclick=()=>{sound=!sound;if(sound){resumeAudio();tone(440,.2,'sine',.04);}$('#sound').textContent=sound?'Sound on':'Sound off';$('#sound').setAttribute('aria-pressed',String(sound));};
-function mapping(){return p.kind==='assassin'?{KeyJ:'katana',KeyK:'dagger',KeyL:'volley'}:{KeyJ:'knife',KeyK:'blood',KeyL:'cloak',KeyI:'bat'};}
+function mapping(){return p.kind==='barbarian'?{KeyJ:'heavy',KeyK:'combo',KeyL:'rampage'}:p.kind==='assassin'?{KeyJ:'katana',KeyK:'dagger',KeyL:'volley'}:{KeyJ:'knife',KeyK:'blood',KeyL:'cloak',KeyI:'bat'};}
 function pointAim(e){if(p.kind!=='assassin')return;const rect=canvas.getBoundingClientRect();aim.pointer=true;aim.x=(e.clientX-rect.left)*1280/rect.width;aim.y=(e.clientY-rect.top)*720/rect.height;}
 canvas.addEventListener('pointermove',pointAim);canvas.addEventListener('pointerdown',e=>{pointAim(e);canvas.focus({preventScroll:true});});
 window.addEventListener('keydown',e=>{if(e.target.matches('select,input'))return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();if(e.code==='Escape'&&!e.repeat){pauseToggle();return;}if(!running||paused)return;keys.add(e.code);if(!e.repeat){if(e.code==='Space')jump(p);const move=mapping()[e.code];if(move)use(move);}});
