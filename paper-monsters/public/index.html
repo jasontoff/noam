@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#211e25"><title>Paper Monsters · Practice Arena</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><a href="/" class="back" aria-label="Back to noam.bot">← <span>noam.bot</span></a><div class="brand">PAPER MONSTERS <small>A WORKING TITLE · FIRST EDITION</small></div><button id="sound" aria-pressed="false">Sound off</button></header>
+<main>
+<section class="masthead"><div><span class="eyebrow">THE PRACTICE THEATRE</span><h1>Small fighters.<br><em>Big rivalries.</em></h1></div><div class="intro">A cast of characters. A world of paper stages.<br>First play-test: Vampire on Moonlit Manor.<div class="practice-controls"><label for="botmode">Practice bot</label><select id="botmode"><option value="spar">Sparring</option><option value="dummy">Standing still</option></select><button id="reset">↻ Reset</button></div></div></section>
+<section class="theatre" aria-label="Platform fighter practice game">
+<div class="hud"><div class="health player"><div><strong>VAMPIRE</strong><span id="php">90 / 110</span></div><div class="bar"><i id="pbar"></i><b style="left:81.8%"></b></div><small id="pstatus">90 starting HP · 110 maximum</small></div><div class="stage-label">I <span>MOONLIT<br>MANOR</span></div><div class="health enemy"><div><strong>THE PATCHWORK BOT</strong><span id="bhp">100 / 100</span></div><div class="bar"><i id="bbar"></i></div><small id="bstatus">Sparring partner · 100 HP</small></div></div>
+<canvas id="game" width="1280" height="720" tabindex="0" aria-label="Side-view platform fighter. Move with A and D or arrows, jump with Space, knife with J, Bloodsuck with K, Dark Cloak with L, Bat Wings with I. While a bat use W and S or up and down to fly."></canvas>
+<div id="overlay" class="overlay"><div class="ticket"><span class="eyebrow">YOUR FIRST REHEARSAL</span><h2>Take the stage.</h2><p>Move, jump, and try your abilities.<br>Drain your opponent’s health to win.</p><button id="play">Enter the stage <span>→</span></button><small>WASD / ARROWS TO MOVE · SPACE TO JUMP</small></div></div>
+<div id="pause" class="pause" hidden>INTERMISSION <span>Press Esc or tap to resume</span></div>
+<div class="stage-footer"><span><i></i> PRACTICE · <b id="mode-label">SPARRING</b></span><span id="hint">Double-jump to reach the upper platforms.</span><button id="pausebutton" aria-label="Pause game">Ⅱ</button></div>
+</section>
+<div class="touch-movement" aria-label="Movement controls"><button data-move="ArrowLeft" aria-label="Move left">←</button><button data-move="ArrowRight" aria-label="Move right">→</button><button data-move="ArrowDown" aria-label="Fly down">↓</button><button data-move="ArrowUp" aria-label="Fly up">↑</button><button data-move="Space" aria-label="Jump">Jump</button></div>
+<section class="abilities" aria-label="Vampire abilities">
+<button class="ability" data-ability="knife"><div class="ability-top"><span class="glyph">↗</span><kbd>J</kbd></div><h3>Knife</h3><p>A quick cut.<br><b>3 damage</b></p><footer><span>2s cooldown</span><strong>READY</strong></footer><div class="cooldown"></div></button>
+<button class="ability blood" data-ability="blood"><div class="ability-top"><span class="glyph">♦</span><kbd>K</kbd></div><h3>Bloodsuck</h3><p>Lunge, bite, replenish.<br><b>5 damage · +5 HP</b></p><footer><span>5s cooldown</span><strong>READY</strong></footer><div class="cooldown"></div></button>
+<button class="ability" data-ability="cloak"><div class="ability-top"><span class="glyph">◌</span><kbd>L</kbd></div><h3>Dark Cloak</h3><p>Disappear for 3 seconds.<br><b>Half damage & healing</b></p><footer><span>20s cooldown</span><strong>READY</strong></footer><div class="cooldown"></div></button>
+<button class="ability" data-ability="bat"><div class="ability-top"><span class="glyph">⋈</span><kbd>I</kbd></div><h3>Bat Wings</h3><p>Fly for 10 seconds.<br><b>Smaller · 1.5× damage taken</b></p><footer><span>30s after bat form*</span><strong>READY</strong></footer><div class="cooldown"></div></button>
+</section>
+<div class="notes"><p><b>The fine print</b> Bloodsuck misses stun you for 0.5s. Aim by facing your opponent. Cloak lets you attack: knife deals 2; Bloodsuck deals & heals 3. As a bat, attacks are locked but cooldowns keep ticking. *Bat cooldown begins when the transformation ends.</p><span>MOVE <kbd>A</kbd><kbd>D</kbd> · JUMP <kbd>SPACE</kbd><br>FLY <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · PAUSE <kbd>ESC</kbd></span></div>
+</main><footer class="page-footer">CUT FROM PAPER. BUILT TO BATTLE.<span>VAMPIRE · CHARACTER NO. 001</span></footer>
+<script type="module" src="game.mjs"></script>
+</body></html>

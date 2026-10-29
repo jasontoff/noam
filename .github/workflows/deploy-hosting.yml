@@ -11,6 +11,7 @@ on:
       - 'drawing-game/public/**'
       - 'tower-defense-game/public/**'
       - 'rpg-game/public/**'
+      - 'paper-monsters/public/**'
       - '.github/workflows/deploy-hosting.yml'
   workflow_dispatch:
 
@@ -22,6 +23,13 @@ jobs:
         working-directory: fps-game
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test Paper Monsters combat rules
+        run: node --test ../paper-monsters/tests/core.test.mjs
 
       - name: Prepare hosting-public
         run: |
@@ -46,6 +54,9 @@ jobs:
           cp ../rpg-game/public/index.html hosting-public/rpg-game/
           cp ../rpg-game/public/game.js hosting-public/rpg-game/
 
+          mkdir -p hosting-public/paper-monsters
+          cp -R ../paper-monsters/public/. hosting-public/paper-monsters/
+
           cat > hosting-public/index.html <<'EOF'
           <!DOCTYPE html>
           <html lang="en"><head><meta charset="UTF-8"><title>noam.bot</title>
@@ -61,6 +72,7 @@ jobs:
             <a href="/racing-game/">Play Overtake</a>
             <a href="/drawing-game/">Play Doodle Duel</a>
             <a href="/tower-defense-game/">Play Path of Ruin</a>
+            <a href="/paper-monsters/">Play Paper Monsters</a>
             <a href="/rpg-game/">Play Crypts &amp; Loot</a>
           </div></body></html>
           EOF

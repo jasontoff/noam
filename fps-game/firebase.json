@@ -2,7 +2,11 @@
   "hosting": {
     "target": "noam",
     "public": "hosting-public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "headers": [
       {
         "source": "/fps-game/**",
@@ -24,6 +28,15 @@
       },
       {
         "source": "/drawing-game/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/paper-monsters/**",
         "headers": [
           {
             "key": "Cache-Control",
