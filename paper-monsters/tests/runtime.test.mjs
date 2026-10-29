@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import * as core from '../public/core.mjs';
+// Run actual game handlers and simulation with only the DOM/audio/rendering boundary stubbed.
+function harness(){
+ const source=fs.readFileSync(new URL('../public/game.mjs',import.meta.url),'utf8').replace(/^import .*\n/,'');
+ const context=new Proxy({}, {get:(o,k)=>k in o?o[k]:(...args)=>k==='createLinearGradient'?{addColorStop(){}}:undefined,set:(o,k,v)=>(o[k]=v,true)});
+ const elements=new Map();const element=s=>{if(!elements.has(s))elements.set(s,{getContext:()=>context,focus(){},getBoundingClientRect:()=>({left:10,top:20,width:640,height:360}),addEventListener(){},style:{},classList:{toggle(){}},setAttribute(k,v){this[k]=v;}});return elements.get(s);};
+ const callbacks={};let audioCreated=0;
+ class Audio{constructor(){audioCreated++;}resume(){}}
+ const sandbox={...core,Math,console,document:{querySelector:element,querySelectorAll:()=>[],createElement:()=>element('temp'),addEventListener(){}},window:{AudioContext:Audio,addEventListener:(key,fn)=>callbacks[key]=fn},requestAnimationFrame(){}};
+ vm.createContext(sandbox);vm.runInContext(source,sandbox);
+ const run=code=>vm.runInContext(code,sandbox);run('sound=false');
+ return {run,element,callbacks,audioCreated:()=>audioCreated,step:(seconds)=>run(`for(let n=0;n<${Math.round(seconds*120)};n++)update(1/120);`)};
+}
+function assassinScene(){const h=harness();h.element('#character').onchange({target:{value:'assassin'}});h.element('#botidentity').onchange({target:{value:'vampire'}});h.element('#botmode').onchange({target:{value:'dummy'}});h.element('#play').onclick();return h;}
+test('selection resets character health, cooldowns and projectiles without adding a fourth move',()=>{const h=assassinScene();assert.equal(h.run('p.hp'),80);h.run("use('volley');stepProjectiles(.2)");assert.ok(h.run('projectiles.length')>0);h.element('#character').onchange({target:{value:'vampire'}});assert.equal(h.run('p.hp'),90);assert.equal(h.run('projectiles.length'),0);assert.equal(h.run('p.cd.blood'),0);assert.match(h.element('.abilities').innerHTML,/Bloodsuck/);h.element('#character').onchange({target:{value:'assassin'}});assert.doesNotMatch(h.element('.abilities').innerHTML,/>Knife</);});
+test('actual volley simulation deals 12 and resets each volley',()=>{const h=assassinScene();h.run("use('volley')");h.step(1.3);assert.equal(h.run('bot.hp'),78);h.step(6);h.run("use('volley')");h.step(1.3);assert.equal(h.run('bot.hp'),66);});
+test('actual projectile miss does not consume the 3-damage first hit',()=>{const h=assassinScene();h.run("use('volley');stepProjectiles(.01);projectiles[0].y=300");h.step(1.3);assert.equal(h.run('bot.hp'),83);});
+test('katana reaches farther than dagger and applies 5 damage',()=>{const h=assassinScene();h.run("p.x=bot.x-110;use('katana')");assert.equal(h.run('bot.hp'),85);h.step(.3);h.run("use('dagger')");assert.equal(h.run('bot.hp'),85);});
+test('turn delay survives movement physics and provides a backstab during sparring',()=>{const h=assassinScene();h.element('#botmode').onchange({target:{value:'spar'}});h.run('p.x=bot.x+40;p.dir=-1');h.step(.4);assert.equal(h.run('bot.dir'),-1);h.run("use('dagger')");assert.equal(h.run('bot.hp'),75);h.step(.45);assert.equal(h.run('bot.dir'),1);});
+test('pointer coordinates scale correctly; keyboard can take over aim; volley locks direction',()=>{const h=assassinScene();h.run('pointAim({clientX:477.5,clientY:306.5})');assert.equal(h.run('aim.x'),935);assert.equal(h.run('aim.y'),573);assert.equal(h.run('aimAngle()'),0);h.run("use('volley');keys.add('KeyW')");h.step(.2);assert.equal(h.run('aim.pointer'),false);assert.ok(h.run('aimAngle()')<0);assert.equal(h.run('projectiles[0].vy'),0);});
+test('standing-still mode cancels pending attacks and keeps bot fixed',()=>{const h=assassinScene();h.run("brain.pending='blood';brain.windup=.1;bot.lunge=.2");h.element('#botmode').onchange({target:{value:'dummy'}});h.step(2);assert.equal(h.run('bot.x'),935);assert.equal(h.run('p.hp'),80);assert.equal(h.run('brain.pending'),null);});
+test('sound is still on by default, unlocks on entry, and respects muting',()=>{const h=harness();h.run('sound=true');assert.equal(h.audioCreated(),0);h.element('#play').onclick();assert.equal(h.audioCreated(),1);h.element('#sound').onclick();h.element('#reset').onclick();assert.equal(h.run('sound'),false);assert.equal(h.audioCreated(),1);});

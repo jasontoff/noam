@@ -29,7 +29,7 @@ jobs:
           node-version: 22
 
       - name: Test Paper Monsters combat rules
-        run: node --test ../paper-monsters/tests/core.test.mjs
+        run: node --test ../paper-monsters/tests/*.test.mjs
 
       - name: Prepare hosting-public
         run: |
